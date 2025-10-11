@@ -2,29 +2,22 @@ import httpx
 import os
 import hashlib
 from urllib.parse import urlparse, unquote
-from fastapi import FastAPI, Request, Form, Depends, HTTPException
+from fastapi import FastAPI, Request, Form, Depends, HTTPException, Body
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
-from fastapi.middleware.cors import CORSMiddleware  # <-- IMPORT THIS
+from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from database import db
 from metadata import get_metadata
+import logging
 
-app = FastAPI(title="DDL Stremio Addon")
-
-# --- ADD THIS MIDDLEWARE BLOCK ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-# --- END OF BLOCK ---
-
+app = FastAPI(title="DDL Stremio Addon - Premium")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(SessionMiddleware, secret_key="a-super-secret-key-that-you-should-change")
 templates = Jinja2Templates(directory="templates")
+
+LOGGER = logging.getLogger(__name__)
 
 # --- Authentication ---
 def is_authenticated(request: Request) -> bool:
@@ -32,7 +25,7 @@ def is_authenticated(request: Request) -> bool:
 
 def require_auth(request: Request):
     if not is_authenticated(request):
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(status_code=307, headers={"Location": "/login"})
 
 # --- Web UI Routes ---
 @app.get("/login", response_class=HTMLResponse)
@@ -54,12 +47,24 @@ async def logout(request: Request):
     return RedirectResponse(url="/login", status_code=303)
 
 @app.get("/", response_class=HTMLResponse)
-async def root_page(request: Request, _: None = Depends(require_auth)):
-    return templates.TemplateResponse("add.html", {"request": request})
+async def dashboard_page(request: Request, _: None = Depends(require_auth)):
+    stats = await db.get_stats()
+    return templates.TemplateResponse("dashboard.html", {"request": request, "stats": stats})
 
-# --- API for Adding Links ---
+@app.get("/manage/{media_type}", response_class=HTMLResponse)
+async def manage_media_page(request: Request, media_type: str, _: None = Depends(require_auth)):
+    return templates.TemplateResponse("media_management.html", {"request": request, "media_type": media_type})
+
+@app.get("/edit/{media_type}/{tmdb_id}", response_class=HTMLResponse)
+async def edit_media_page(request: Request, media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
+    media = await db.get_media_by_tmdb_id(media_type, tmdb_id)
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+    return templates.TemplateResponse("media_edit.html", {"request": request, "media": media, "media_type": media_type})
+
+# --- API Routes ---
 @app.post("/api/add-ddl", response_class=JSONResponse)
-async def add_ddl_endpoint(request: Request, _: None = Depends(require_auth)):
+async def api_add_ddl(request: Request, _: None = Depends(require_auth)):
     data = await request.json()
     url = data.get("url")
     if not url: raise HTTPException(status_code=400, detail="URL is required.")
@@ -70,7 +75,7 @@ async def add_ddl_endpoint(request: Request, _: None = Depends(require_auth)):
             resp = await client.head(url, follow_redirects=True, timeout=10)
             resp.raise_for_status()
             size_bytes = int(resp.headers.get('content-length', '0'))
-            size_str = f"{round(size_bytes / (1024**3), 2)} GB" if size_bytes > 0 else "Unknown"
+            size_str = f"{round(size_bytes / (1024**3), 2)} GB" if size_bytes > 0 else "N/A"
         
         metadata_info = await get_metadata(filename, url)
         if not metadata_info:
@@ -79,14 +84,34 @@ async def add_ddl_endpoint(request: Request, _: None = Depends(require_auth)):
         await db.insert_media(metadata_info, size=size_str, name=filename)
         return JSONResponse({"message": f"Successfully added '{metadata_info['title']}'"}, status_code=200)
     except Exception as e:
+        LOGGER.error(f"Error processing DDL {url}: {e}")
         return JSONResponse({"message": f"Error: {str(e)}"}, status_code=500)
+
+@app.get("/api/media/{media_type}")
+async def api_get_media(media_type: str, page: int = 1, search: str = "", _: None = Depends(require_auth)):
+    items, total = await db.get_media_list(media_type, page, 12, search)
+    return {"items": items, "total": total, "page": page, "page_size": 12}
+
+@app.put("/api/media/{media_type}/{tmdb_id}")
+async def api_update_media(media_type: str, tmdb_id: int, data: dict = Body(...), _: None = Depends(require_auth)):
+    success = await db.update_media_details(media_type, tmdb_id, data)
+    if not success:
+        raise HTTPException(status_code=404, detail="Failed to update or media not found.")
+    return {"message": "Media updated successfully"}
+
+@app.delete("/api/media/{media_type}/{tmdb_id}")
+async def api_delete_media(media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
+    success = await db.delete_media(media_type, tmdb_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Media not found.")
+    return {"message": "Media deleted successfully"}
 
 # --- Stremio Addon Routes ---
 @app.get("/stremio/manifest.json")
 async def get_manifest():
     return {
-        "id": "community.ddl.streamer", "version": "2.0.0", "name": "DDL Streamer",
-        "description": "Stream from your Direct Download Links.", "logo": "https://i.imgur.com/f33tN3G.png",
+        "id": "community.ddl.streamer.premium", "version": "3.0.0", "name": "DDL Streamer (Premium)",
+        "description": "Stream from your personal DDL library.", "logo": "https://i.imgur.com/f33tN3G.png",
         "types": ["movie", "series"], "resources": ["catalog", "meta", "stream"],
         "catalogs": [
             {"type": "movie", "id": "ddl_movies", "name": "DDL Movies"},
@@ -97,11 +122,8 @@ async def get_manifest():
 @app.get("/stremio/catalog/{media_type}/{catalog_id}.json")
 async def get_catalog(media_type: str):
     stremio_type = "tv" if media_type == "series" else "movie"
-    items = await db.get_all_media(stremio_type, 0, 100)
-    metas = [{
-        "id": f"ddl-{item['tmdb_id']}", "type": media_type, "name": item['title'],
-        "poster": item.get('poster'), "year": item.get('release_year')
-    } for item in items]
+    items, _ = await db.get_media_list(stremio_type, 1, 100)
+    metas = [{"id": f"ddl-{i['tmdb_id']}", "type": media_type, "name": i['title'], "poster": i.get('poster'), "year": i.get('release_year')} for i in items]
     return {"metas": metas}
 
 @app.get("/stremio/meta/{media_type}/{stremio_id}.json")
@@ -119,7 +141,7 @@ async def get_meta(media_type: str, stremio_id: str):
     }
     if media_type == 'series':
         meta_obj['videos'] = [
-            {"id": f"{stremio_id}:{s['season_number']}:{e['episode_number']}", "title": e['title'], "season": s['season_number'], "episode": e['episode_number']}
+            {"id": f"{stremio_id}:{s['season_number']}:{e['episode_number']}", "title": e['title'], "season": s['season_number'], "episode": e['episode_number'], "thumbnail": e.get('episode_backdrop')}
             for s in item.get('seasons', []) for e in s.get('episodes', [])
         ]
     return {"meta": meta_obj}
@@ -134,14 +156,14 @@ async def get_streams(media_type: str, stremio_id: str):
 
     streams = []
     if media_type == 'movie':
-        streams = [{"title": f"{q['quality']}\n💾 {q['size']}", "url": q['url']} for q in item.get('streams', [])]
+        streams = [{"title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']} for q in item.get('streams', [])]
     else:
         season_num, episode_num = int(parts[1]), int(parts[2])
         for s in item.get('seasons', []):
             if s['season_number'] == season_num:
                 for e in s.get('episodes', []):
                     if e['episode_number'] == episode_num:
-                        streams = [{"title": f"{q['quality']}\n💾 {q['size']}", "url": q['url']} for q in e.get('streams', [])]
+                        streams = [{"title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']} for q in e.get('streams', [])]
                         break
                 break
     return {"streams": streams}
