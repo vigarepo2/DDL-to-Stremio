@@ -6,13 +6,13 @@
     <title>{% block title %}DDL Stremio{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 text-gray-800">
-    <nav class="bg-white shadow-md">
-        <div class="max-w-7xl mx-auto px-4">
+<body class="bg-gray-50 text-gray-800 font-sans">
+    <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
-                <a href="/" class="text-xl font-bold text-blue-600">DDL Stremio Addon</a>
+                <a href="/" class="text-xl font-bold text-indigo-600">DDL Stremio</a>
                 {% if request.session.authenticated %}
-                <a href="/logout" class="text-sm text-gray-600 hover:text-blue-600">Logout</a>
+                <a href="/logout" class="text-sm text-gray-600 hover:text-indigo-600">Logout</a>
                 {% endif %}
             </div>
         </div>
