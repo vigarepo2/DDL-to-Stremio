@@ -5,7 +5,13 @@ WORKDIR /app
 COPY pyproject.toml .
 
 RUN pip install "uv>=0.1.18"
-RUN uv pip install --system -r <(uv pip compile pyproject.toml --output-file=-)
+
+# --- MODIFIED SECTION ---
+# 1. Compile pyproject.toml to a standard requirements.txt
+RUN uv pip compile pyproject.toml --output-file=requirements.txt
+# 2. Install dependencies from the requirements.txt file
+RUN uv pip install --system -r requirements.txt
+# --- END MODIFIED SECTION ---
 
 COPY . .
 
