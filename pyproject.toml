@@ -13,5 +13,6 @@ dependencies = [
     "themoviedb>=1.0.0",
     "httpx>=0.28.0",
     "aiofiles>=24.1.0",
-    "itsdangerous>=2.2.0"  # <-- ADD THIS LINE
+    "itsdangerous>=2.2.0",
+    "python-multipart>=0.0.9"  # <-- ADD THIS LINE
 ]
