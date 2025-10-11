@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold mb-6 text-gray-900">Dashboard</h1>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+    <!-- Movie Stat Card -->
+    <div class="bg-white p-6 rounded-xl shadow-md flex items-center">
+        <div class="bg-indigo-100 text-indigo-600 p-4 rounded-full mr-4">
+            <i class="fas fa-film fa-2x"></i>
+        </div>
+        <div>
+            <p class="text-gray-500 text-sm">Total Movies</p>
+            <p class="text-3xl font-bold">{{ stats.movies }}</p>
+        </div>
+    </div>
+    <!-- TV Show Stat Card -->
+    <div class="bg-white p-6 rounded-xl shadow-md flex items-center">
+        <div class="bg-teal-100 text-teal-600 p-4 rounded-full mr-4">
+            <i class="fas fa-tv fa-2x"></i>
+        </div>
+        <div>
+            <p class="text-gray-500 text-sm">Total TV Shows</p>
+            <p class="text-3xl font-bold">{{ stats.tv_shows }}</p>
+        </div>
+    </div>
+</div>
+
+<!-- Add DDL Form -->
+<div class="bg-white p-6 rounded-xl shadow-md">
+    <h2 class="text-xl font-semibold mb-4">Add New Media</h2>
+    <form id="ddl-form" class="space-y-4">
+        <div>
+            <label for="ddl_links" class="block text-sm font-medium text-gray-700 mb-2">DDL Links (one per line)</label>
+            <textarea id="ddl_links" rows="6" required placeholder="https://..." class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-indigo-500"></textarea>
+        </div>
+        <div class="flex justify-end">
+            <button type="submit" id="submit-button" class="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 font-medium transition-colors disabled:bg-indigo-400">Add Media</button>
+        </div>
+    </form>
+</div>
+<div id="response-container" class="mt-6 space-y-2"></div>
+
+<script>
+document.getElementById('ddl-form').addEventListener('submit', async function(event) {
+    event.preventDefault();
+    const button = document.getElementById('submit-button');
+    const responseContainer = document.getElementById('response-container');
+    const links = document.getElementById('ddl_links').value.trim().split('\n').filter(link => link.trim());
+
+    button.disabled = true;
+    button.textContent = 'Processing...';
+    responseContainer.innerHTML = '';
+
+    for (const link of links) {
+        let div = document.createElement('div');
+        div.className = 'p-4 rounded-md text-sm transition-all bg-gray-100 text-gray-800';
+        div.textContent = `Processing: ${link.split('/').pop()}`;
+        responseContainer.appendChild(div);
+        
+        try {
+            const response = await fetch('/api/add-ddl', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: link.trim() })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.message || 'Unknown error');
+            div.className = 'p-4 rounded-md text-sm bg-green-100 text-green-800 border-l-4 border-green-500';
+            div.textContent = result.message;
+        } catch (error) {
+            div.className = 'p-4 rounded-md text-sm bg-red-100 text-red-800 border-l-4 border-red-500';
+            div.textContent = `Error: ${error.message}`;
+        }
+    }
+    button.disabled = false;
+    button.textContent = 'Add Media';
+    document.getElementById('ddl_links').value = '';
+    setTimeout(() => location.reload(), 2000); // Refresh stats after adding
+});
+</script>
+{% endblock %}
