@@ -2,24 +2,24 @@ from os import getenv
 from dotenv import load_dotenv
 import hashlib
 
+# Load environment variables from a file named 'config.env'
 load_dotenv("config.env")
 
 class Settings:
-    # Server
+    # Server configuration
     BASE_URL = getenv("BASE_URL", "http://127.0.0.1:8000").rstrip('/')
     PORT = int(getenv("PORT", "8000"))
 
-    # Database
+    # Database connection string
     MONGO_URI = getenv("MONGO_URI", "")
 
-    # API
+    # The Movie Database (TMDb) API Key
     TMDB_API_KEY = getenv("TMDB_API_KEY", "")
 
-    # Admin Panel
+    # Admin Panel credentials
     ADMIN_USERNAME = getenv("ADMIN_USERNAME", "admin")
     ADMIN_PASSWORD = getenv("ADMIN_PASSWORD", "admin")
-    # A hashed version for secure comparison
     ADMIN_PASSWORD_HASH = hashlib.sha256(ADMIN_PASSWORD.encode()).hexdigest()
 
-# Create an instance of the settings
+# Create a single instance of the settings to be used across the app
 settings = Settings()
