@@ -1,0 +1,16 @@
+[project]
+name = "DDL-Stremio-Addon"
+version = "1.0.0"
+description = "A simple, self-hosted Stremio addon to stream from Direct Download Links (DDLs)."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "motor>=3.7.0",
+    "python-dotenv>=1.1.0",
+    "jinja2>=3.1.0",
+    "parse-torrent-title>=2.8.0",
+    "themoviedb>=1.0.0",
+    "httpx>=0.28.0",
+    "aiofiles>=24.1.0"
+]
