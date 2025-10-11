@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Add Media{% endblock %}
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-6">Add New Media via DDL</h1>
+    <div class="bg-white p-6 rounded-lg shadow-lg">
+        <form id="ddl-form" class="space-y-4">
+            <div>
+                <label for="ddl_links" class="block text-sm font-medium mb-2">DDL Links (one per line)</label>
+                <textarea id="ddl_links" name="ddl_links" rows="8" required placeholder="https://example.com/Movie.Name.2024.1080p.mkv" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+            <div class="flex justify-end">
+                <button type="submit" id="submit-button" class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 font-medium">
+                    Add Media
+                </button>
+            </div>
+        </form>
+    </div>
+    <div id="response-container" class="mt-6 space-y-2"></div>
+</div>
+<script>
+document.getElementById('ddl-form').addEventListener('submit', async function(event) {
+    event.preventDefault();
+    const button = document.getElementById('submit-button');
+    const responseContainer = document.getElementById('response-container');
+    const linksText = document.getElementById('ddl_links').value;
+    const links = linksText.trim().split('\n').filter(link => link.trim() !== '');
+
+    button.disabled = true;
+    button.textContent = 'Processing...';
+    responseContainer.innerHTML = '';
+
+    for (const link of links) {
+        let messageDiv = document.createElement('div');
+        messageDiv.className = 'p-4 rounded-md text-sm';
+        messageDiv.textContent = `Processing: ${link}`;
+        messageDiv.classList.add('bg-gray-100', 'text-gray-700');
+        responseContainer.appendChild(messageDiv);
+        
+        try {
+            const response = await fetch('/api/add-ddl', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: link.trim() })
+            });
+
+            const result = await response.json();
+            if (response.ok) {
+                messageDiv.classList.remove('bg-gray-100', 'text-gray-700');
+                messageDiv.classList.add('bg-green-100', 'text-green-700', 'border-l-4', 'border-green-500');
+                messageDiv.textContent = result.message;
+            } else {
+                throw new Error(result.detail || 'Unknown error');
+            }
+        } catch (error) {
+            messageDiv.classList.remove('bg-gray-100', 'text-gray-700');
+            messageDiv.classList.add('bg-red-100', 'text-red-700', 'border-l-4', 'border-red-500');
+            messageDiv.textContent = `Error: ${error.message} for ${link}`;
+        }
+    }
+    
+    button.disabled = false;
+    button.textContent = 'Add Media';
+    document.getElementById('ddl_links').value = '';
+});
+</script>
+{% endblock %}
