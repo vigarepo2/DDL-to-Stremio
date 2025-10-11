@@ -2,22 +2,26 @@ from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-class QualityDetail(BaseModel):
+# Defines the structure for each available stream/quality
+class StreamInfo(BaseModel):
     quality: str
-    url: str  # DDL URL
+    url: str
     name: str
     size: str
 
+# Defines the structure for a single episode
 class Episode(BaseModel):
     episode_number: int
     title: str
     episode_backdrop: Optional[str] = None
-    telegram: List[QualityDetail]  # Renaming this would require more refactoring, so we'll keep it
+    streams: List[StreamInfo]  # Refactored from 'telegram'
 
+# Defines the structure for a season, which contains episodes
 class Season(BaseModel):
     season_number: int
     episodes: List[Episode]
 
+# A base model with common fields for both movies and TV shows
 class MediaBase(BaseModel):
     tmdb_id: int
     title: str
@@ -31,8 +35,10 @@ class MediaBase(BaseModel):
     media_type: str
     updated_on: datetime = Field(default_factory=datetime.utcnow)
 
+# The final schema for a movie document
 class MovieSchema(MediaBase):
-    telegram: List[QualityDetail]
+    streams: List[StreamInfo]  # Refactored from 'telegram'
 
+# The final schema for a TV show document
 class TVShowSchema(MediaBase):
     seasons: List[Season]
