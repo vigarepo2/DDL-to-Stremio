@@ -6,11 +6,23 @@ from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
+from fastapi.middleware.cors import CORSMiddleware  # <-- IMPORT THIS
 from config import settings
 from database import db
 from metadata import get_metadata
 
 app = FastAPI(title="DDL Stremio Addon")
+
+# --- ADD THIS MIDDLEWARE BLOCK ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# --- END OF BLOCK ---
+
 app.add_middleware(SessionMiddleware, secret_key="a-super-secret-key-that-you-should-change")
 templates = Jinja2Templates(directory="templates")
 
@@ -59,7 +71,7 @@ async def add_ddl_endpoint(request: Request, _: None = Depends(require_auth)):
             resp.raise_for_status()
             size_bytes = int(resp.headers.get('content-length', '0'))
             size_str = f"{round(size_bytes / (1024**3), 2)} GB" if size_bytes > 0 else "Unknown"
-
+        
         metadata_info = await get_metadata(filename, url)
         if not metadata_info:
             return JSONResponse({"message": f"Failed to get metadata for '{filename}'. Check filename format."}, status_code=400)
