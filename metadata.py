@@ -28,7 +28,11 @@ async def get_metadata(filename: str, file_url: str) -> dict | None:
             return None
 
         if season and episode:
-            search_results = await tmdb.search().tv(query=title, year=year)
+            # --- TV Show Logic ---
+            
+            # FIX: Removed the 'year' argument as it's not supported for TV searches
+            search_results = await tmdb.search().tv(query=title)
+            
             if not search_results: return None
             
             show = await tmdb.tv(search_results[0].id).details()
@@ -45,6 +49,7 @@ async def get_metadata(filename: str, file_url: str) -> dict | None:
                 "quality": quality, "url": file_url,
             }
         else:
+            # --- Movie Logic (Remains unchanged and correctly uses year) ---
             search_results = await tmdb.search().movies(query=title, year=year)
             if not search_results: return None
             
