@@ -1,7 +1,7 @@
 [project]
-name = "DDL-Stremio-Addon"
-version = "2.0.0"
-description = "A simple, self-hosted Stremio addon to stream from Direct Download Links (DDLs)."
+name = "DDL-Stremio-Premium"
+version = "3.0.0"
+description = "A premium, self-hosted Stremio addon to manage and stream from Direct Download Links (DDLs)."
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
@@ -14,5 +14,5 @@ dependencies = [
     "httpx>=0.28.0",
     "aiofiles>=24.1.0",
     "itsdangerous>=2.2.0",
-    "python-multipart>=0.0.9"  # <-- ADD THIS LINE
+    "python-multipart>=0.0.9"
 ]
