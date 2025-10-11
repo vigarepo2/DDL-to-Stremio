@@ -25,6 +25,7 @@ def is_authenticated(request: Request) -> bool:
 
 def require_auth(request: Request):
     if not is_authenticated(request):
+        # Use a 307 redirect for POST requests, but 303 is fine for GET
         raise HTTPException(status_code=307, headers={"Location": "/login"})
 
 # --- Web UI Routes ---
@@ -46,23 +47,39 @@ async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
 
+# --- UPDATED DASHBOARD ROUTE ---
 @app.get("/", response_class=HTMLResponse)
 async def dashboard_page(request: Request, _: None = Depends(require_auth)):
     stats = await db.get_stats()
-    return templates.TemplateResponse("dashboard.html", {"request": request, "stats": stats})
+    recent_movies, _ = await db.get_media_list('movie', 1, 5)
+    recent_tv, _ = await db.get_media_list('tv', 1, 5)
+    
+    # Combine and sort recent items by 'updated_on'
+    recent_items = sorted(recent_movies + recent_tv, key=lambda x: x['updated_on'], reverse=True)[:5]
+    
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request, 
+        "stats": stats,
+        "recent_items": recent_items
+    })
 
 @app.get("/manage/{media_type}", response_class=HTMLResponse)
 async def manage_media_page(request: Request, media_type: str, _: None = Depends(require_auth)):
+    if media_type not in ['movie', 'tv']:
+        raise HTTPException(status_code=404, detail="Invalid media type")
     return templates.TemplateResponse("media_management.html", {"request": request, "media_type": media_type})
 
 @app.get("/edit/{media_type}/{tmdb_id}", response_class=HTMLResponse)
 async def edit_media_page(request: Request, media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
+    if media_type not in ['movie', 'tv']:
+        raise HTTPException(status_code=404, detail="Invalid media type")
     media = await db.get_media_by_tmdb_id(media_type, tmdb_id)
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
     return templates.TemplateResponse("media_edit.html", {"request": request, "media": media, "media_type": media_type})
 
-# --- API Routes ---
+# --- API Routes (No changes needed here from previous fix) ---
+# ... (All your API routes for add, get, update, delete media remain the same)
 @app.post("/api/add-ddl", response_class=JSONResponse)
 async def api_add_ddl(request: Request, _: None = Depends(require_auth)):
     data = await request.json()
@@ -106,7 +123,7 @@ async def api_delete_media(media_type: str, tmdb_id: int, _: None = Depends(requ
         raise HTTPException(status_code=404, detail="Media not found.")
     return {"message": "Media deleted successfully"}
 
-# --- Stremio Addon Routes ---
+# --- Stremio Addon Routes (Title fix applied) ---
 @app.get("/stremio/manifest.json")
 async def get_manifest():
     return {
@@ -142,10 +159,12 @@ async def get_meta(media_type: str, stremio_id: str):
     if media_type == 'series':
         meta_obj['videos'] = [
             {"id": f"{stremio_id}:{s['season_number']}:{e['episode_number']}", "title": e['title'], "season": s['season_number'], "episode": e['episode_number'], "thumbnail": e.get('episode_backdrop')}
-            for s in item.get('seasons', []) for e in s.get('episodes', [])
+            for s in sorted(item.get('seasons', []), key=lambda x: x['season_number'])
+            for e in sorted(s.get('episodes', []), key=lambda x: x['episode_number'])
         ]
     return {"meta": meta_obj}
 
+# --- STREMIO TITLE FIX APPLIED HERE ---
 @app.get("/stremio/stream/{media_type}/{stremio_id}.json")
 async def get_streams(media_type: str, stremio_id: str):
     parts = stremio_id.split(':')
