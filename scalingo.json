@@ -2,7 +2,6 @@
   "name": "DDL Stremio Addon V2",
   "description": "A self-hosted Stremio addon to stream from Direct Download Links (DDLs).",
   "logo": "https://i.imgur.com/f33tN3G.png",
-  "repository": "https://github.com/vigarepo2/DDL-to-Stremio",
   "addons": [
     {
       "plan": "scalingo-mongodb:mongo-sandbox",
@@ -12,11 +11,10 @@
   "env": {
     "BASE_URL": {
       "description": "The public URL of your application, automatically set by Scalingo.",
-      "value": "$SCALINGO_APP_URL",
-      "generator": "url"
+      "value": "$SCALINGO_APP_URL"
     },
     "MONGO_URI": {
-      "description": "Your MongoDB connection string, automatically provided by the addon.",
+      "description": "Your MongoDB connection string, provided by the addon.",
       "value": "$SCALINGO_MONGO_URL"
     },
     "TMDB_API_KEY": {
@@ -29,17 +27,8 @@
     },
     "ADMIN_PASSWORD": {
       "description": "Password for the web admin panel.",
-      "value": "",
-      "generator": "secret"
+      "value": "admin",
+      "generator": ""
     }
-  },
-  "formation": {
-    "web": {
-      "amount": 1,
-      "size": "S"
-    }
-  },
-  "buildpacks": [
-    "scalingo/docker"
-  ]
+  }
 }
