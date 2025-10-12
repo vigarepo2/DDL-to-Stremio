@@ -9,7 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from database import db
-from metadata import get_metadata, format_tmdb_image  # <-- FIX IS HERE
+from metadata import get_metadata, format_tmdb_image
 import logging
 
 app = FastAPI(title="DDL Stremio Addon - Premium")
@@ -19,7 +19,6 @@ templates = Jinja2Templates(directory="templates")
 
 LOGGER = logging.getLogger(__name__)
 
-# --- Authentication ---
 def is_authenticated(request: Request) -> bool:
     return request.session.get("authenticated", False)
 
@@ -27,7 +26,6 @@ def require_auth(request: Request):
     if not is_authenticated(request):
         raise HTTPException(status_code=307, headers={"Location": "/login"})
 
-# --- Web UI Routes ---
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     if is_authenticated(request): return RedirectResponse(url="/", status_code=303)
@@ -66,7 +64,6 @@ async def edit_media_page(request: Request, media_type: str, tmdb_id: int, _: No
     if not media: raise HTTPException(status_code=404, detail="Media not found")
     return templates.TemplateResponse("media_edit.html", {"request": request, "media": media, "media_type": media_type})
 
-# --- API Routes ---
 @app.post("/api/add-ddl", response_class=JSONResponse)
 async def api_add_ddl(request: Request, _: None = Depends(require_auth)):
     data = await request.json()
@@ -110,30 +107,38 @@ async def api_refetch_tmdb(media_type: str, tmdb_id: int, _: None = Depends(requ
     if media_type == 'movie':
         details = await tmdb.movie(tmdb_id).details()
         logo = await get_logo(tmdb_id, "movie")
-        return {
-            "title": details.title, "release_year": details.release_date.year if details.release_date else 0, "rating": round(details.vote_average, 1),
-            "poster": format_tmdb_image(details.poster_path), "backdrop": format_tmdb_image(details.backdrop_path, "original"),
-            "logo": logo, "description": details.overview, "genres": [g.name for g in details.genres]
-        }
-    else: # tv
+        return {"title": details.title, "release_year": details.release_date.year if details.release_date else 0, "rating": round(details.vote_average, 1), "poster": format_tmdb_image(details.poster_path), "backdrop": format_tmdb_image(details.backdrop_path, "original"), "logo": logo, "description": details.overview, "genres": [g.name for g in details.genres]}
+    else:
         details = await tmdb.tv(tmdb_id).details()
         logo = await get_logo(tmdb_id, "tv")
-        return {
-            "title": details.name, "release_year": details.first_air_date.year if details.first_air_date else 0, "rating": round(details.vote_average, 1),
-            "poster": format_tmdb_image(details.poster_path), "backdrop": format_tmdb_image(details.backdrop_path, "original"),
-            "logo": logo, "description": details.overview, "genres": [g.name for g in details.genres]
-        }
+        return {"title": details.name, "release_year": details.first_air_date.year if details.first_air_date else 0, "rating": round(details.vote_average, 1), "poster": format_tmdb_image(details.poster_path), "backdrop": format_tmdb_image(details.backdrop_path, "original"), "logo": logo, "description": details.overview, "genres": [g.name for g in details.genres]}
 
-# --- Stremio Addon Routes ---
+# --- NEW API ENDPOINT FOR IMAGES ---
+@app.get("/api/images/{media_type}/{tmdb_id}")
+async def api_get_images(media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
+    from metadata import tmdb
+    try:
+        if media_type == 'movie':
+            images = await tmdb.movie(tmdb_id).images()
+        else:
+            images = await tmdb.tv(tmdb_id).images()
+        return {
+            "posters": [{"path": img.file_path} for img in images.posters],
+            "backdrops": [{"path": img.file_path} for img in images.backdrops],
+            "logos": [{"path": img.file_path} for img in images.logos],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/stremio/manifest.json")
 async def get_manifest():
-    return {"id": "community.ddl.streamer.premium", "version": "3.0.0", "name": "DDL Streamer (Premium)", "description": "Stream from your personal DDL library.", "logo": "https://i.imgur.com/f33tN3G.png", "types": ["movie", "series"], "resources": ["catalog", "meta", "stream"], "catalogs": [{"type": "movie", "id": "ddl_movies", "name": "DDL Movies"}, {"type": "series", "id": "ddl_series", "name": "DDL TV Shows"}], "idPrefixes": ["ddl-"]}
+    return {"id": "community.ddl.streamer.premium", "version": "4.0.0", "name": "DDL Streamer (Premium)", "description": "Stream from your personal DDL library.", "logo": "https://i.imgur.com/f33tN3G.png", "types": ["movie", "series"], "resources": ["catalog", "meta", "stream"], "catalogs": [{"type": "movie", "id": "ddl_movies", "name": "DDL Movies"}, {"type": "series", "id": "ddl_series", "name": "DDL TV Shows"}], "idPrefixes": ["ddl-"]}
 
 @app.get("/stremio/catalog/{media_type}/{catalog_id}.json")
 async def get_catalog(media_type: str):
     stremio_type = "tv" if media_type == "series" else "movie"
     items, _ = await db.get_media_list(stremio_type, 1, 100)
-    metas = [{"id": f"ddl-{i['tmdb_id']}", "type": media_type, "name": i['title'], "poster": i.get('poster'), "year": i.get('release_year')} for i in items]
+    metas = [{"id": f"ddl-{i['tmdb_id']}", "type": media_type, "name": i['title'], "poster": i.get('poster'), "year": i.get('release_year'), "logo": i.get('logo')} for i in items]
     return {"metas": metas}
 
 @app.get("/stremio/meta/{media_type}/{stremio_id}.json")
@@ -142,14 +147,7 @@ async def get_meta(media_type: str, stremio_id: str):
     stremio_type = "tv" if media_type == "series" else "movie"
     item = await db.get_media_by_tmdb_id(stremio_type, tmdb_id)
     if not item: return {"meta": {}}
-    
-    meta_obj = {
-        "id": stremio_id, "type": media_type, "name": item['title'],
-        "poster": item.get('poster'), "background": item.get('backdrop'),
-        "logo": item.get('logo'),
-        "description": item.get('description'), "year": item.get('release_year'),
-        "imdbRating": item.get('rating'), "genres": item.get('genres')
-    }
+    meta_obj = {"id": stremio_id, "type": media_type, "name": item['title'], "poster": item.get('poster'), "background": item.get('backdrop'), "logo": item.get('logo'), "description": item.get('description'), "year": item.get('release_year'), "imdbRating": item.get('rating'), "genres": item.get('genres')}
     if media_type == 'series':
         meta_obj['videos'] = [{"id": f"{stremio_id}:{s['season_number']}:{e['episode_number']}", "title": e['title'], "season": s['season_number'], "episode": e['episode_number'], "thumbnail": e.get('episode_backdrop')} for s in sorted(item.get('seasons', []), key=lambda x: x['season_number']) for e in sorted(s.get('episodes', []), key=lambda x: x['episode_number'])]
     return {"meta": meta_obj}
@@ -169,7 +167,6 @@ async def get_streams(media_type: str, stremio_id: str):
             if s['season_number'] == season_num:
                 for e in s.get('episodes', []):
                     if e['episode_number'] == episode_num:
-                        streams = [{"name": "DDL", "title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']} for q in e.get('streams', [])]
-                        break
+                        streams = [{"name": "DDL", "title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']} for q in e.get('streams', [])]; break
                 break
     return {"streams": streams}
