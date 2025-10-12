@@ -113,7 +113,7 @@ async def api_refetch_tmdb(media_type: str, tmdb_id: int, _: None = Depends(requ
         logo = await get_logo(tmdb_id, "tv")
         return {"title": details.name, "release_year": details.first_air_date.year if details.first_air_date else 0, "rating": round(details.vote_average, 1), "poster": format_tmdb_image(details.poster_path), "backdrop": format_tmdb_image(details.backdrop_path, "original"), "logo": logo, "description": details.overview, "genres": [g.name for g in details.genres]}
 
-# --- NEW API ENDPOINT FOR IMAGES ---
+# --- UPDATED API ENDPOINT FOR IMAGES ---
 @app.get("/api/images/{media_type}/{tmdb_id}")
 async def api_get_images(media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
     from metadata import tmdb
@@ -122,14 +122,20 @@ async def api_get_images(media_type: str, tmdb_id: int, _: None = Depends(requir
             images = await tmdb.movie(tmdb_id).images()
         else:
             images = await tmdb.tv(tmdb_id).images()
+        
+        all_images = images.posters + images.backdrops + images.logos
+        languages = sorted(list(set(img.iso_639_1 for img in all_images if img.iso_639_1)))
+
         return {
-            "posters": [{"path": img.file_path} for img in images.posters],
-            "backdrops": [{"path": img.file_path} for img in images.backdrops],
-            "logos": [{"path": img.file_path} for img in images.logos],
+            "posters": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.posters],
+            "backdrops": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.backdrops],
+            "logos": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.logos],
+            "languages": languages
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# --- Stremio Addon Routes ---
 @app.get("/stremio/manifest.json")
 async def get_manifest():
     return {"id": "community.ddl.streamer.premium", "version": "4.0.0", "name": "DDL Streamer (Premium)", "description": "Stream from your personal DDL library.", "logo": "https://i.imgur.com/f33tN3G.png", "types": ["movie", "series"], "resources": ["catalog", "meta", "stream"], "catalogs": [{"type": "movie", "id": "ddl_movies", "name": "DDL Movies"}, {"type": "series", "id": "ddl_series", "name": "DDL TV Shows"}], "idPrefixes": ["ddl-"]}
