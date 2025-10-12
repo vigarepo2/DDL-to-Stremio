@@ -68,21 +68,33 @@ async def edit_media_page(request: Request, media_type: str, tmdb_id: int, _: No
 async def api_add_ddl(request: Request, _: None = Depends(require_auth)):
     data = await request.json()
     url = data.get("url")
-    if not url: raise HTTPException(status_code=400, detail="URL is required.")
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required.")
+
     try:
         filename = os.path.basename(unquote(urlparse(url).path))
         async with httpx.AsyncClient() as client:
             resp = await client.head(url, follow_redirects=True, timeout=10)
-            resp.raise_for_status()
+            resp.raise_for_status()  # Raises HTTPStatusError for 4xx/5xx responses
             size_bytes = int(resp.headers.get('content-length', '0'))
             size_str = f"{round(size_bytes / (1024**3), 2)} GB" if size_bytes > 0 else "N/A"
+        
         metadata_info = await get_metadata(filename, url)
-        if not metadata_info: return JSONResponse({"message": f"Failed to get metadata for '{filename}'. Check filename format."}, status_code=400)
+        if not metadata_info:
+            return JSONResponse({"message": f"Failed to get metadata for '{filename}'. Check filename format or TMDb availability."}, status_code=400)
+        
         await db.insert_media(metadata_info, size=size_str, name=filename)
         return JSONResponse({"message": f"Successfully added '{metadata_info['title']}'"}, status_code=200)
+
+    except httpx.HTTPStatusError as e:
+        LOGGER.warning(f"HTTP error for {url}: {e.response.status_code}")
+        return JSONResponse({"message": f"URL returned an error: {e.response.status_code} Not Found"}, status_code=400)
+    except httpx.RequestError as e:
+        LOGGER.warning(f"Network error for {url}: {e}")
+        return JSONResponse({"message": f"Could not connect to the URL. Check the link or network."}, status_code=400)
     except Exception as e:
-        LOGGER.error(f"Error processing DDL {url}: {e}")
-        return JSONResponse({"message": f"Error: {str(e)}"}, status_code=500)
+        LOGGER.error(f"Error processing DDL {url}: {e}", exc_info=True)
+        return JSONResponse({"message": "An unexpected server error occurred. Check logs for details."}, status_code=500)
 
 @app.get("/api/media/{media_type}")
 async def api_get_media(media_type: str, page: int = 1, search: str = "", _: None = Depends(require_auth)):
@@ -113,7 +125,6 @@ async def api_refetch_tmdb(media_type: str, tmdb_id: int, _: None = Depends(requ
         logo = await get_logo(tmdb_id, "tv")
         return {"title": details.name, "release_year": details.first_air_date.year if details.first_air_date else 0, "rating": round(details.vote_average, 1), "poster": format_tmdb_image(details.poster_path), "backdrop": format_tmdb_image(details.backdrop_path, "original"), "logo": logo, "description": details.overview, "genres": [g.name for g in details.genres]}
 
-# --- UPDATED API ENDPOINT FOR IMAGES ---
 @app.get("/api/images/{media_type}/{tmdb_id}")
 async def api_get_images(media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
     from metadata import tmdb
