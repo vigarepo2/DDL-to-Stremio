@@ -27,8 +27,11 @@
     },
     "ADMIN_PASSWORD": {
       "description": "Password for the web admin panel.",
-      "value": "admin",
-      "generator": ""
+      "value": "",
+      "generator": "secret"
     }
-  }
+  },
+  "buildpacks": [
+    "scalingo/python"
+  ]
 }
