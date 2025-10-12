@@ -9,7 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from database import db
-from metadata import get_metadata, format_tmdb_image
+from metadata import get_metadata, format_tmdb_image, find_tmdb_id_by_imdb_id  # <-- IMPORT NEW FUNCTION
 import logging
 
 app = FastAPI(title="DDL Stremio Addon - Premium")
@@ -19,27 +19,39 @@ templates = Jinja2Templates(directory="templates")
 
 LOGGER = logging.getLogger(__name__)
 
+
 # --- Authentication & Web Routes (No changes here) ---
 def is_authenticated(request: Request) -> bool:
     return request.session.get("authenticated", False)
+
+
 def require_auth(request: Request):
     if not is_authenticated(request):
         raise HTTPException(status_code=307, headers={"Location": "/login"})
+
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     if is_authenticated(request): return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse("login.html", {"request": request})
+
+
 @app.post("/login")
 async def handle_login(request: Request, username: str = Form(...), password: str = Form(...)):
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     if username == settings.ADMIN_USERNAME and password_hash == settings.ADMIN_PASSWORD_HASH:
         request.session["authenticated"] = True
         return RedirectResponse(url="/", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"}, status_code=400)
+    return templates.TemplateResponse("login.html", {"request": request, "error": "Invalid credentials"},
+                                      status_code=400)
+
+
 @app.get("/logout")
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard_page(request: Request, _: None = Depends(require_auth)):
     stats = await db.get_stats()
@@ -47,18 +59,24 @@ async def dashboard_page(request: Request, _: None = Depends(require_auth)):
     recent_tv, _ = await db.get_media_list('tv', 1, 5)
     recent_items = sorted(recent_movies + recent_tv, key=lambda x: x['updated_on'], reverse=True)[:5]
     return templates.TemplateResponse("dashboard.html", {"request": request, "stats": stats, "recent_items": recent_items})
+
+
 @app.get("/manage/{media_type}", response_class=HTMLResponse)
 async def manage_media_page(request: Request, media_type: str, _: None = Depends(require_auth)):
     if media_type not in ['movie', 'tv']: raise HTTPException(status_code=404, detail="Invalid media type")
     return templates.TemplateResponse("media_management.html", {"request": request, "media_type": media_type})
+
+
 @app.get("/edit/{media_type}/{tmdb_id}", response_class=HTMLResponse)
 async def edit_media_page(request: Request, media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
     if media_type not in ['movie', 'tv']: raise HTTPException(status_code=404, detail="Invalid media type")
     media = await db.get_media_by_tmdb_id(media_type, tmdb_id)
     if not media: raise HTTPException(status_code=404, detail="Media not found")
-    return templates.TemplateResponse("media_edit.html", {"request": request, "media": media, "media_type": media_type})
+    return templates.TemplateResponse("media_edit.html",
+                                      {"request": request, "media": media, "media_type": media_type})
 
-# --- API Routes ---
+
+# --- API Routes (No changes here) ---
 @app.post("/api/add-ddl", response_class=JSONResponse)
 async def api_add_ddl(request: Request, _: None = Depends(require_auth)):
     data = await request.json()
@@ -70,14 +88,22 @@ async def api_add_ddl(request: Request, _: None = Depends(require_auth)):
             resp = await client.head(url, follow_redirects=True, timeout=10)
             resp.raise_for_status()
             size_bytes = int(resp.headers.get('content-length', '0'))
-            size_str = f"{round(size_bytes / (1024**3), 2)} GB" if size_bytes > 0 else "N/A"
+            size_str = f"{round(size_bytes / (1024 ** 3), 2)} GB" if size_bytes > 0 else "N/A"
         metadata_info = await get_metadata(filename, url)
-        if not metadata_info: return JSONResponse({"message": f"Failed to get metadata for '{filename}'. Check filename format or TMDb availability."}, status_code=400)
+        if not metadata_info: return JSONResponse(
+            {"message": f"Failed to get metadata for '{filename}'. Check filename format or TMDb availability."},
+            status_code=400)
         await db.insert_media(metadata_info, size=size_str, name=filename)
         return JSONResponse({"message": f"Successfully added '{metadata_info['title']}'"}, status_code=200)
-    except httpx.HTTPStatusError as e: return JSONResponse({"message": f"URL returned an error: {e.response.status_code} Not Found"}, status_code=400)
-    except httpx.RequestError: return JSONResponse({"message": "Could not connect to the URL. Check the link or network."}, status_code=400)
-    except Exception as e: LOGGER.error(f"Error processing DDL {url}: {e}", exc_info=True); return JSONResponse({"message": "An unexpected server error occurred. Check logs for details."}, status_code=500)
+    except httpx.HTTPStatusError as e:
+        return JSONResponse({"message": f"URL returned an error: {e.response.status_code} Not Found"},
+                              status_code=400)
+    except httpx.RequestError:
+        return JSONResponse({"message": "Could not connect to the URL. Check the link or network."}, status_code=400)
+    except Exception as e:
+        LOGGER.error(f"Error processing DDL {url}: {e}", exc_info=True); return JSONResponse(
+        {"message": "An unexpected server error occurred. Check logs for details."}, status_code=500)
+
 
 @app.post("/api/fetch-ddl-details", response_class=JSONResponse)
 async def api_fetch_ddl_details(request: Request, _: None = Depends(require_auth)):
@@ -90,19 +116,27 @@ async def api_fetch_ddl_details(request: Request, _: None = Depends(require_auth
             resp = await client.head(url, follow_redirects=True, timeout=10)
             resp.raise_for_status()
             size_bytes = int(resp.headers.get('content-length', '0'))
-            size_str = f"{round(size_bytes / (1024**3), 2)} GB" if size_bytes > 0 else "N/A"
+            size_str = f"{round(size_bytes / (1024 ** 3), 2)} GB" if size_bytes > 0 else "N/A"
         return JSONResponse({"name": filename, "size": size_str})
-    except httpx.HTTPStatusError as e: raise HTTPException(status_code=400, detail=f"URL returned an error: {e.response.status_code}")
-    except httpx.RequestError: raise HTTPException(status_code=400, detail="Could not connect to the URL.")
-    except Exception as e: LOGGER.error(f"Error fetching details for DDL {url}: {e}", exc_info=True); raise HTTPException(status_code=500, detail="An unexpected server error occurred.")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=400, detail=f"URL returned an error: {e.response.status_code}")
+    except httpx.RequestError:
+        raise HTTPException(status_code=400, detail="Could not connect to the URL.")
+    except Exception as e:
+        LOGGER.error(f"Error fetching details for DDL {url}: {e}", exc_info=True); raise HTTPException(
+        status_code=500, detail="An unexpected server error occurred.")
+
 
 @app.get("/api/fetch-episode-details/{tmdb_id}/{season_number}/{episode_number}", response_class=JSONResponse)
-async def api_fetch_episode_details(tmdb_id: int, season_number: int, episode_number: int, _: None = Depends(require_auth)):
+async def api_fetch_episode_details(tmdb_id: int, season_number: int, episode_number: int,
+                                    _: None = Depends(require_auth)):
     from metadata import tmdb
     try:
         episode = await tmdb.episode(tmdb_id, season_number, episode_number).details()
         return {"title": episode.name, "episode_backdrop": format_tmdb_image(episode.still_path, "w500")}
-    except Exception: raise HTTPException(status_code=404, detail="Episode not found on TMDb.")
+    except Exception:
+        raise HTTPException(status_code=404, detail="Episode not found on TMDb.")
+
 
 @app.get("/api/fetch-season-details/{tmdb_id}/{season_number}", response_class=JSONResponse)
 async def api_fetch_season_details(tmdb_id: int, season_number: int, _: None = Depends(require_auth)):
@@ -110,7 +144,8 @@ async def api_fetch_season_details(tmdb_id: int, season_number: int, _: None = D
     try:
         season = await tmdb.season(tmdb_id, season_number).details()
         episodes_data = [
-            {"episode_number": ep.episode_number, "title": ep.name, "episode_backdrop": format_tmdb_image(ep.still_path, "w500")}
+            {"episode_number": ep.episode_number, "title": ep.name,
+             "episode_backdrop": format_tmdb_image(ep.still_path, "w500")}
             for ep in season.episodes
         ]
         return episodes_data
@@ -118,26 +153,40 @@ async def api_fetch_season_details(tmdb_id: int, season_number: int, _: None = D
         LOGGER.error(f"Failed to fetch season details for S{season_number} of TMDB ID {tmdb_id}: {e}")
         raise HTTPException(status_code=404, detail="Season not found on TMDb.")
 
+
 @app.get("/api/media/{media_type}")
 async def api_get_media(media_type: str, page: int = 1, search: str = "", _: None = Depends(require_auth)):
     items, total = await db.get_media_list(media_type, page, 12, search)
     return {"items": items, "total": total, "page": page, "page_size": 12}
+
+
 @app.put("/api/media/{media_type}/{tmdb_id}")
 async def api_update_media(media_type: str, tmdb_id: int, data: dict = Body(...), _: None = Depends(require_auth)):
     success = await db.update_media_details(media_type, tmdb_id, data)
     if not success: raise HTTPException(status_code=404, detail="Failed to update or media not found.")
     return {"message": "Media updated successfully"}
+
+
 @app.delete("/api/media/{media_type}/{tmdb_id}")
 async def api_delete_media(media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
     success = await db.delete_media(media_type, tmdb_id)
     if not success: raise HTTPException(status_code=404, detail="Media not found.")
     return {"message": "Media deleted successfully"}
+
+
 @app.get("/api/refetch-tmdb/{media_type}/{tmdb_id}")
 async def api_refetch_tmdb(media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
     from metadata import get_logo, tmdb
-    details = await (tmdb.movie(tmdb_id) if media_type=='movie' else tmdb.tv(tmdb_id)).details()
+    details = await (tmdb.movie(tmdb_id) if media_type == 'movie' else tmdb.tv(tmdb_id)).details()
     logo = await get_logo(tmdb_id, media_type)
-    return {"title": details.title if media_type=='movie' else details.name, "release_year": (details.release_date.year if details.release_date else 0) if media_type=='movie' else (details.first_air_date.year if details.first_air_date else 0), "rating": round(details.vote_average, 1), "poster": format_tmdb_image(details.poster_path), "backdrop": format_tmdb_image(details.backdrop_path, "original"), "logo": logo, "description": details.overview, "genres": [g.name for g in details.genres]}
+    return {"title": details.title if media_type == 'movie' else details.name,
+            "release_year": (details.release_date.year if details.release_date else 0) if media_type == 'movie' else (
+                details.first_air_date.year if details.first_air_date else 0),
+            "rating": round(details.vote_average, 1), "poster": format_tmdb_image(details.poster_path),
+            "backdrop": format_tmdb_image(details.backdrop_path, "original"), "logo": logo,
+            "description": details.overview, "genres": [g.name for g in details.genres]}
+
+
 @app.get("/api/images/{media_type}/{tmdb_id}")
 async def api_get_images(media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
     from metadata import tmdb
@@ -145,43 +194,130 @@ async def api_get_images(media_type: str, tmdb_id: int, _: None = Depends(requir
         images = await (tmdb.movie(tmdb_id) if media_type == 'movie' else tmdb.tv(tmdb_id)).images()
         all_images = images.posters + images.backdrops + images.logos
         languages = sorted(list(set(img.iso_639_1 for img in all_images if img.iso_639_1)))
-        return { "posters": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.posters], "backdrops": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.backdrops], "logos": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.logos], "languages": languages }
-    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+        return {"posters": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.posters],
+                "backdrops": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.backdrops],
+                "logos": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.logos],
+                "languages": languages}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-# --- Stremio Addon Routes (No changes here) ---
+
+# --- Stremio Addon Routes (MODIFIED) ---
+
 @app.get("/stremio/manifest.json")
 async def get_manifest():
-    return {"id": "community.ddl.streamer.premium", "version": "4.0.0", "name": "DDL Streamer (Premium)", "description": "Stream from your personal DDL library.", "logo": "https://i.imgur.com/f33tN3G.png", "types": ["movie", "series"], "resources": ["catalog", "meta", "stream"], "catalogs": [{"type": "movie", "id": "ddl_movies", "name": "DDL Movies"}, {"type": "series", "id": "ddl_series", "name": "DDL TV Shows"}], "idPrefixes": ["ddl-"]}
+    return {
+        "id": "community.ddl.streamer.premium",
+        "version": "4.0.1", # Incremented version
+        "name": "DDL Streamer (Premium)",
+        "description": "Stream from your personal DDL library.",
+        "logo": "https://i.imgur.com/f33tN3G.png",
+        "types": ["movie", "series"],
+        "resources": ["catalog", "meta", "stream"],
+        "catalogs": [
+            {"type": "movie", "id": "ddl_movies", "name": "DDL Movies"},
+            {"type": "series", "id": "ddl_series", "name": "DDL TV Shows"}
+        ]
+        # REMOVED "idPrefixes" to respond to all content
+    }
+
+
 @app.get("/stremio/catalog/{media_type}/{catalog_id}.json")
 async def get_catalog(media_type: str):
     stremio_type = "tv" if media_type == "series" else "movie"
     items, _ = await db.get_media_list(stremio_type, 1, 100)
-    metas = [{"id": f"ddl-{i['tmdb_id']}", "type": media_type, "name": i['title'], "poster": i.get('poster'), "year": i.get('release_year'), "logo": i.get('logo')} for i in items]
+    # The catalog will still use the custom ddl- prefix to avoid conflicts
+    metas = [{"id": f"ddl-{i['tmdb_id']}", "type": media_type, "name": i['title'], "poster": i.get('poster'),
+              "year": i.get('release_year'), "logo": i.get('logo')} for i in items]
     return {"metas": metas}
+
+
 @app.get("/stremio/meta/{media_type}/{stremio_id}.json")
 async def get_meta(media_type: str, stremio_id: str):
-    tmdb_id = int(stremio_id.replace("ddl-", ""))
     stremio_type = "tv" if media_type == "series" else "movie"
+    tmdb_id = None
+
+    # Handle both standard IMDb IDs and our custom ddl- IDs
+    if stremio_id.startswith("tt"):
+        tmdb_id = await find_tmdb_id_by_imdb_id(stremio_id, stremio_type)
+    elif stremio_id.startswith("ddl-"):
+        try:
+            tmdb_id = int(stremio_id.replace("ddl-", ""))
+        except ValueError:
+            tmdb_id = None
+
+    if not tmdb_id:
+        return {"meta": {}}
+
     item = await db.get_media_by_tmdb_id(stremio_type, tmdb_id)
-    if not item: return {"meta": {}}
-    meta_obj = {"id": stremio_id, "type": media_type, "name": item['title'], "poster": item.get('poster'), "background": item.get('backdrop'), "logo": item.get('logo'), "description": item.get('description'), "year": item.get('release_year'), "imdbRating": item.get('rating'), "genres": item.get('genres')}
+    if not item:
+        return {"meta": {}}
+
+    meta_obj = {
+        "id": stremio_id,  # IMPORTANT: Respond with the ID Stremio requested
+        "type": media_type,
+        "name": item['title'],
+        "poster": item.get('poster'),
+        "background": item.get('backdrop'),
+        "logo": item.get('logo'),
+        "description": item.get('description'),
+        "year": item.get('release_year'),
+        "imdbRating": item.get('rating'),
+        "genres": item.get('genres')
+    }
+
     if media_type == 'series':
-        meta_obj['videos'] = [{"id": f"{stremio_id}:{s['season_number']}:{e['episode_number']}", "title": e['title'], "season": s['season_number'], "episode": e['episode_number'], "thumbnail": e.get('episode_backdrop')} for s in sorted(item.get('seasons', []), key=lambda x: x['season_number']) for e in sorted(s.get('episodes', []), key=lambda x: x['episode_number'])]
+        meta_obj['videos'] = [
+            {
+                "id": f"{stremio_id}:{s['season_number']}:{e['episode_number']}",
+                "title": e['title'],
+                "season": s['season_number'],
+                "episode": e['episode_number'],
+                "thumbnail": e.get('episode_backdrop')
+            }
+            for s in sorted(item.get('seasons', []), key=lambda x: x['season_number'])
+            for e in sorted(s.get('episodes', []), key=lambda x: x['episode_number'])
+        ]
     return {"meta": meta_obj}
+
+
 @app.get("/stremio/stream/{media_type}/{stremio_id}.json")
 async def get_streams(media_type: str, stremio_id: str):
-    parts = stremio_id.split(':'); tmdb_id = int(parts[0].replace("ddl-", ""))
+    parts = stremio_id.split(':')
+    media_id = parts[0]
     stremio_type = "tv" if media_type == "series" else "movie"
+    tmdb_id = None
+
+    # Handle both standard IMDb IDs and our custom ddl- IDs
+    if media_id.startswith("tt"):
+        tmdb_id = await find_tmdb_id_by_imdb_id(media_id, stremio_type)
+    elif media_id.startswith("ddl-"):
+        try:
+            tmdb_id = int(media_id.replace("ddl-", ""))
+        except ValueError:
+            tmdb_id = None
+
+    if not tmdb_id:
+        return {"streams": []}
+
     item = await db.get_media_by_tmdb_id(stremio_type, tmdb_id)
-    if not item: return {"streams": []}
+    if not item:
+        return {"streams": []}
+
     streams = []
-    if media_type == 'movie': streams = [{"name": "DDL", "title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']} for q in item.get('streams', [])]
+    if media_type == 'movie':
+        streams = [{"name": "DDL", "title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']} for q in
+                   item.get('streams', [])]
     else:
+        if len(parts) < 3: return {"streams": []}
         season_num, episode_num = int(parts[1]), int(parts[2])
         for s in item.get('seasons', []):
             if s['season_number'] == season_num:
                 for e in s.get('episodes', []):
                     if e['episode_number'] == episode_num:
-                        streams = [{"name": "DDL", "title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']} for q in e.get('streams', [])]; break
+                        streams = [{"name": "DDL", "title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']}
+                                   for q in e.get('streams', [])]
+                        break
                 break
+
     return {"streams": streams}
