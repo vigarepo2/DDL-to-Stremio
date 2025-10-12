@@ -19,6 +19,7 @@ templates = Jinja2Templates(directory="templates")
 
 LOGGER = logging.getLogger(__name__)
 
+# --- Authentication ---
 def is_authenticated(request: Request) -> bool:
     return request.session.get("authenticated", False)
 
@@ -26,6 +27,7 @@ def require_auth(request: Request):
     if not is_authenticated(request):
         raise HTTPException(status_code=307, headers={"Location": "/login"})
 
+# --- Web Panel Routes (HTML) ---
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     if is_authenticated(request): return RedirectResponse(url="/", status_code=303)
@@ -64,37 +66,55 @@ async def edit_media_page(request: Request, media_type: str, tmdb_id: int, _: No
     if not media: raise HTTPException(status_code=404, detail="Media not found")
     return templates.TemplateResponse("media_edit.html", {"request": request, "media": media, "media_type": media_type})
 
+# --- API Routes (JSON) ---
 @app.post("/api/add-ddl", response_class=JSONResponse)
 async def api_add_ddl(request: Request, _: None = Depends(require_auth)):
     data = await request.json()
     url = data.get("url")
     if not url:
         raise HTTPException(status_code=400, detail="URL is required.")
-
     try:
         filename = os.path.basename(unquote(urlparse(url).path))
         async with httpx.AsyncClient() as client:
             resp = await client.head(url, follow_redirects=True, timeout=10)
-            resp.raise_for_status()  # Raises HTTPStatusError for 4xx/5xx responses
+            resp.raise_for_status()
             size_bytes = int(resp.headers.get('content-length', '0'))
             size_str = f"{round(size_bytes / (1024**3), 2)} GB" if size_bytes > 0 else "N/A"
-        
         metadata_info = await get_metadata(filename, url)
         if not metadata_info:
             return JSONResponse({"message": f"Failed to get metadata for '{filename}'. Check filename format or TMDb availability."}, status_code=400)
-        
         await db.insert_media(metadata_info, size=size_str, name=filename)
         return JSONResponse({"message": f"Successfully added '{metadata_info['title']}'"}, status_code=200)
-
     except httpx.HTTPStatusError as e:
-        LOGGER.warning(f"HTTP error for {url}: {e.response.status_code}")
         return JSONResponse({"message": f"URL returned an error: {e.response.status_code} Not Found"}, status_code=400)
-    except httpx.RequestError as e:
-        LOGGER.warning(f"Network error for {url}: {e}")
-        return JSONResponse({"message": f"Could not connect to the URL. Check the link or network."}, status_code=400)
+    except httpx.RequestError:
+        return JSONResponse({"message": "Could not connect to the URL. Check the link or network."}, status_code=400)
     except Exception as e:
         LOGGER.error(f"Error processing DDL {url}: {e}", exc_info=True)
         return JSONResponse({"message": "An unexpected server error occurred. Check logs for details."}, status_code=500)
+
+# --- NEW API ENDPOINT FOR FETCHING STREAM DETAILS ---
+@app.post("/api/fetch-ddl-details", response_class=JSONResponse)
+async def api_fetch_ddl_details(request: Request, _: None = Depends(require_auth)):
+    data = await request.json()
+    url = data.get("url")
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required.")
+    try:
+        filename = os.path.basename(unquote(urlparse(url).path))
+        async with httpx.AsyncClient() as client:
+            resp = await client.head(url, follow_redirects=True, timeout=10)
+            resp.raise_for_status()
+            size_bytes = int(resp.headers.get('content-length', '0'))
+            size_str = f"{round(size_bytes / (1024**3), 2)} GB" if size_bytes > 0 else "N/A"
+        return JSONResponse({"name": filename, "size": size_str})
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=400, detail=f"URL returned an error: {e.response.status_code}")
+    except httpx.RequestError:
+        raise HTTPException(status_code=400, detail="Could not connect to the URL.")
+    except Exception as e:
+        LOGGER.error(f"Error fetching details for DDL {url}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected server error occurred.")
 
 @app.get("/api/media/{media_type}")
 async def api_get_media(media_type: str, page: int = 1, search: str = "", _: None = Depends(require_auth)):
@@ -129,20 +149,10 @@ async def api_refetch_tmdb(media_type: str, tmdb_id: int, _: None = Depends(requ
 async def api_get_images(media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
     from metadata import tmdb
     try:
-        if media_type == 'movie':
-            images = await tmdb.movie(tmdb_id).images()
-        else:
-            images = await tmdb.tv(tmdb_id).images()
-        
+        images = await (tmdb.movie(tmdb_id) if media_type == 'movie' else tmdb.tv(tmdb_id)).images()
         all_images = images.posters + images.backdrops + images.logos
         languages = sorted(list(set(img.iso_639_1 for img in all_images if img.iso_639_1)))
-
-        return {
-            "posters": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.posters],
-            "backdrops": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.backdrops],
-            "logos": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.logos],
-            "languages": languages
-        }
+        return { "posters": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.posters], "backdrops": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.backdrops], "logos": [{"path": img.file_path, "lang": img.iso_639_1} for img in images.logos], "languages": languages }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
