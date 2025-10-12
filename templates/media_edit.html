@@ -1,13 +1,8 @@
 {% extends "base.html" %}
-
 {% block title %}Edit: {{ media.title }}{% endblock %}
-
 {% block content %}
 <div class="max-w-7xl mx-auto">
-    <a href="/manage/{{ media_type }}" class="text-sm text-indigo-600 hover:underline mb-4 inline-flex items-center">
-        <i class="fas fa-arrow-left mr-2"></i>Back to {{ media_type|title }}s
-    </a>
-    
+    <a href="/manage/{{ media_type }}" class="text-sm text-indigo-600 hover:underline mb-4 inline-flex items-center"><i class="fas fa-arrow-left mr-2"></i>Back to {{ media_type|title }}s</a>
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div class="lg:col-span-1">
             <div class="bg-white rounded-xl shadow-md p-6 sticky top-8">
@@ -19,140 +14,44 @@
                 <p id="description-preview" class="text-sm text-gray-600 mt-4 max-h-48 overflow-y-auto">{{ media.description }}</p>
             </div>
         </div>
-
         <div class="lg:col-span-2 space-y-8">
             <div class="bg-white p-6 rounded-xl shadow-md">
-                <div class="flex flex-wrap gap-4 justify-between items-center border-b pb-3 mb-4">
-                    <h2 class="text-xl font-semibold">General Details</h2>
-                    <div class="flex gap-2">
-                        <button id="refetch-btn" onclick="handleRefetch()" class="text-sm bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"><i class="fas fa-sync-alt mr-2"></i>Refetch</button>
-                        <button onclick="openImageSelector()" class="text-sm bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors"><i class="fas fa-images mr-2"></i>Change Images</button>
-                    </div>
-                </div>
+                <div class="flex flex-wrap gap-4 justify-between items-center border-b pb-3 mb-4"><h2 class="text-xl font-semibold">General Details</h2><div class="flex gap-2"><button id="refetch-btn" onclick="handleRefetch()" class="text-sm bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition-colors"><i class="fas fa-sync-alt mr-2"></i>Refetch</button><button onclick="openImageSelector()" class="text-sm bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors"><i class="fas fa-images mr-2"></i>Change Images</button></div></div>
                 <form id="details-form" class="space-y-4">
-                    <div><label class="block text-sm font-medium text-gray-700">Title</label><input type="text" name="title" value="{{ media.title }}" oninput="document.getElementById('title-preview').textContent=this.value" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"></div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div><label class="block text-sm font-medium text-gray-700">Release Year</label><input type="number" name="release_year" value="{{ media.release_year }}" oninput="document.getElementById('year-preview').textContent=this.value" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"></div>
-                        <div><label class="block text-sm font-medium text-gray-700">Rating</label><input type="number" step="0.1" name="rating" value="{{ media.rating }}" oninput="document.getElementById('rating-preview').textContent=this.value" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"></div>
-                    </div>
-                    <div><label class="block text-sm font-medium text-gray-700">Poster URL</label><input type="url" name="poster" value="{{ media.poster }}" oninput="document.getElementById('poster-preview').src=this.value" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"></div>
+                    <div><label class="block text-sm font-medium text-gray-700">Title</label><input type="text" name="title" value="{{ media.title }}" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-gray-700">Release Year</label><input type="number" name="release_year" value="{{ media.release_year }}" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"></div><div><label class="block text-sm font-medium text-gray-700">Rating</label><input type="number" step="0.1" name="rating" value="{{ media.rating }}" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"></div></div>
+                    <div><label class="block text-sm font-medium text-gray-700">Poster URL</label><input type="url" name="poster" value="{{ media.poster }}" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"></div>
                     <div><label class="block text-sm font-medium text-gray-700">Backdrop URL</label><input type="url" name="backdrop" value="{{ media.backdrop }}" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"></div>
                     <div><label class="block text-sm font-medium text-gray-700">Logo URL</label><input type="url" name="logo" value="{{ media.logo }}" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"></div>
                     <div><label class="block text-sm font-medium text-gray-700">Genres (comma-separated)</label><input type="text" name="genres" value="{{ media.genres|join(', ') }}" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md"></div>
-                    <div><label class="block text-sm font-medium text-gray-700">Description</label><textarea name="description" rows="4" oninput="document.getElementById('description-preview').textContent=this.value" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md">{{ media.description }}</textarea></div>
+                    <div><label class="block text-sm font-medium text-gray-700">Description</label><textarea name="description" rows="4" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md">{{ media.description }}</textarea></div>
                 </form>
             </div>
-
-            <div class="bg-white p-6 rounded-xl shadow-md">
-                <h2 class="text-xl font-semibold mb-4 border-b pb-3">Manage Content</h2>
-                <div id="content-container"></div>
-            </div>
-
-            <div class="bg-red-50 p-6 rounded-xl border border-red-200">
-                <h2 class="text-xl font-semibold text-red-800 mb-2">Danger Zone</h2>
-                <p class="text-sm text-red-700 mb-4">Deleting this media item is permanent and cannot be undone.</p>
-                <button onclick="deleteEntireMedia()" class="bg-red-600 text-white px-5 py-2 rounded-md hover:bg-red-700 font-medium transition-colors">Delete This {{ media_type|title }}</button>
-            </div>
+            <div class="bg-white p-6 rounded-xl shadow-md"><h2 class="text-xl font-semibold mb-4 border-b pb-3">Manage Content</h2><div id="content-container"></div></div>
+            <div class="bg-red-50 p-6 rounded-xl border border-red-200"><h2 class="text-xl font-semibold text-red-800 mb-2">Danger Zone</h2><p class="text-sm text-red-700 mb-4">Deleting this media item is permanent and cannot be undone.</p><button onclick="deleteEntireMedia()" class="bg-red-600 text-white px-5 py-2 rounded-md hover:bg-red-700 font-medium transition-colors">Delete This {{ media_type|title }}</button></div>
         </div>
     </div>
 </div>
-
-<div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg md:left-64">
-    <div class="max-w-7xl mx-auto flex justify-end">
-        <button onclick="handleSaveChanges()" class="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 font-bold transition-colors shadow-lg">
-            <i class="fas fa-save mr-2"></i>Save All Changes
-        </button>
-    </div>
-</div>
-
-<div id="image-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 hidden"><div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"><div class="flex justify-between items-center p-4 border-b"><h2 class="text-xl font-semibold">Select Image</h2><button onclick="closeImageSelector()" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button></div><div class="flex border-b"><button id="tab-posters" onclick="switchTab('posters')" class="px-4 py-2 font-medium text-sm border-b-2 border-indigo-500 text-indigo-600">Posters</button><button id="tab-backdrops" onclick="switchTab('backdrops')" class="px-4 py-2 font-medium text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700">Backdrops</button><button id="tab-logos" onclick="switchTab('logos')" class="px-4 py-2 font-medium text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700">Logos</button></div><div id="image-galleries" class="p-4 overflow-y-auto"><div id="gallery-posters" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4"></div><div id="gallery-backdrops" class="grid grid-cols-2 md:grid-cols-3 gap-4 hidden"></div><div id="gallery-logos" class="grid grid-cols-2 md:grid-cols-4 gap-4 hidden bg-gray-800 p-4 rounded-lg"></div></div></div></div>
-
+<div class="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-sm border-t border-gray-200 p-4 shadow-lg md:left-64"><div class="max-w-7xl mx-auto flex justify-end"><button onclick="handleSaveChanges()" class="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 font-bold transition-colors shadow-lg flex items-center"><i class="fas fa-save mr-2"></i>Save All Changes</button></div></div>
+<div id="image-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50 hidden"><div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col"><div class="flex justify-between items-center p-4 border-b"><div class="flex items-center gap-4"><h2 class="text-xl font-semibold">Select Image</h2><select id="lang-filter" class="text-sm border-gray-300 rounded-md"></select></div><button onclick="closeImageSelector()" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button></div><div class="flex border-b"><button id="tab-posters" onclick="switchTab('posters')" class="px-4 py-2 font-medium text-sm border-b-2 border-indigo-500 text-indigo-600">Posters</button><button id="tab-backdrops" onclick="switchTab('backdrops')" class="px-4 py-2 font-medium text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700">Backdrops</button><button id="tab-logos" onclick="switchTab('logos')" class="px-4 py-2 font-medium text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700">Logos</button></div><div id="image-galleries" class="p-4 overflow-y-auto"><div id="gallery-posters" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4"></div><div id="gallery-backdrops" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 hidden"></div><div id="gallery-logos" class="grid grid-cols-2 md:grid-cols-4 gap-4 hidden bg-gray-800 p-4 rounded-lg"></div></div></div></div>
 <script>
-    const mediaType = '{{ media_type }}';
-    const tmdbId = {{ media.tmdb_id }};
-    let mediaObject = {{ media|tojson|safe }};
-
-    function showToast(message, isError = false) {
-        const toast = document.createElement('div');
-        toast.className = `fixed top-5 right-5 ${isError ? 'bg-red-600' : 'bg-green-600'} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-pulse`;
-        toast.textContent = message;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
-    }
-
-    // --- UNIFIED SAVE FUNCTION ---
-    async function handleSaveChanges() {
-        // 1. Gather details from the main form
-        const detailsForm = new FormData(document.getElementById('details-form'));
-        const updatedDetails = {};
-        detailsForm.forEach((value, key) => updatedDetails[key] = value);
-        updatedDetails.genres = updatedDetails.genres.split(',').map(g => g.trim()).filter(g => g);
-        updatedDetails.release_year = parseInt(updatedDetails.release_year, 10);
-        updatedDetails.rating = parseFloat(updatedDetails.rating);
-
-        // 2. Gather content data (streams/seasons)
-        const contentData = {};
-        if (mediaType === 'movie') {
-            contentData.streams = Array.from(document.querySelectorAll("#content-container .stream-item")).map(item => ({
-                quality: item.querySelector(".quality-input").value.trim(),
-                name: item.querySelector(".name-input").value.trim(),
-                url: item.querySelector(".url-input").value.trim()
-            }));
-        } else {
-            contentData.seasons = [];
-            for (const seasonEl of document.querySelectorAll(".season-item")) {
-                const seasonNum = parseInt(seasonEl.querySelector(".season-number-input").value, 10);
-                const seasonObj = { season_number: seasonNum, episodes: [] };
-                for (const episodeEl of seasonEl.querySelectorAll(".episode-item")) {
-                    const episodeNum = parseInt(episodeEl.querySelector(".episode-number-input").value, 10);
-                    const episodeTitle = episodeEl.querySelector(".episode-title-input").value;
-                    const episodeObj = { episode_number: episodeNum, title: episodeTitle, streams: [] };
-                    for (const streamEl of episodeEl.querySelectorAll(".stream-item")) {
-                        episodeObj.streams.push({
-                            quality: streamEl.querySelector(".quality-input").value.trim(),
-                            name: streamEl.querySelector(".name-input").value.trim(),
-                            url: streamEl.querySelector(".url-input").value.trim()
-                        });
-                    }
-                    seasonObj.episodes.push(episodeObj);
-                }
-                contentData.seasons.push(seasonObj);
-            }
-        }
-
-        // 3. Merge all data and send to backend
-        const finalData = { ...mediaObject, ...updatedDetails, ...contentData };
-
-        try {
-            const response = await fetch(`/api/media/${mediaType}/${tmdbId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(finalData)
-            });
-            if (!response.ok) throw new Error((await response.json()).detail || 'Failed to save changes.');
-            showToast('Changes saved successfully!');
-            setTimeout(() => window.location.reload(), 1500);
-        } catch (error) {
-            showToast(error.message, true);
-        }
-    }
-
-    // Other functions (Refetch, Image Modal, Delete) remain the same
-    async function handleRefetch(){const e=document.getElementById("refetch-btn");e.disabled=!0,e.innerHTML='<i class="fas fa-sync-alt mr-2 animate-spin"></i>Fetching...';try{const t=await fetch(`/api/refetch-tmdb/${mediaType}/${tmdbId}`);if(!t.ok)throw new Error("Failed to fetch data.");const n=await t.json();["title","release_year","rating","poster","backdrop","logo","description"].forEach(e=>{document.querySelector(`[name="${e}"]`).value=n[e]||""}),document.querySelector('[name="genres"]').value=n.genres.join(", "),showToast("Data refetched. Review and save.")}catch(t){showToast(t.message,!0)}finally{e.disabled=!1,e.innerHTML='<i class="fas fa-sync-alt mr-2"></i>Refetch from TMDb'}}
+    const mediaType='{{ media_type }}',tmdbId={{ media.tmdb_id }};let mediaObject={{ media|tojson|safe }},imageDataCache=null;
+    function showToast(t,e=!1){const o=document.createElement("div");o.className=`fixed top-5 right-5 ${e?"bg-red-600":"bg-green-600"} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-pulse`,o.textContent=t,document.body.appendChild(o),setTimeout(()=>o.remove(),3e3)}
+    async function handleSaveChanges(){const t={},e=new FormData(document.getElementById("details-form"));e.forEach((e,o)=>t[o]=e),t.genres=t.genres.split(",").map(e=>e.trim()).filter(e=>e),t.release_year=parseInt(t.release_year,10),t.rating=parseFloat(t.rating);const o={};if("movie"===mediaType)o.streams=Array.from(document.querySelectorAll("#content-container .stream-item")).map(e=>({quality:e.querySelector(".quality-input").value.trim(),name:e.querySelector(".name-input").value.trim(),url:e.querySelector(".url-input").value.trim()}));else{o.seasons=[];for(const e of document.querySelectorAll(".season-item")){const t=parseInt(e.querySelector(".season-number-input").value,10),n={season_number:t,episodes:[]};for(const t of e.querySelectorAll(".episode-item")){const e=parseInt(t.querySelector(".episode-number-input").value,10),s=t.querySelector(".episode-title-input").value,a={episode_number:e,title:s,streams:[]};for(const e of t.querySelectorAll(".stream-item"))a.streams.push({quality:e.querySelector(".quality-input").value.trim(),name:e.querySelector(".name-input").value.trim(),url:e.querySelector(".url-input").value.trim()});n.episodes.push(a)}o.seasons.push(n)}}const n={...mediaObject,...t,...o};try{const t=await fetch(`/api/media/${mediaType}/${tmdbId}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(n)});if(!t.ok){let e="Failed to save.";try{e=(await t.json()).detail||e}catch(t){e=await t.text()}throw new Error(e)}showToast("Changes saved successfully!"),setTimeout(()=>window.location.reload(),1500)}catch(e){showToast(e.message,!0)}}
+    async function handleRefetch(){const e=document.getElementById("refetch-btn");e.disabled=!0,e.innerHTML='<i class="fas fa-sync-alt mr-2 animate-spin"></i>Fetching...';try{const t=await fetch(`/api/refetch-tmdb/${mediaType}/${tmdbId}`);if(!t.ok)throw new Error("Failed to fetch data.");const n=await t.json();["title","release_year","rating","poster","backdrop","logo","description"].forEach(e=>{const t=document.querySelector(`[name="${e}"]`);t&&(t.value=n[e]||"")}),document.querySelector('[name="genres"]').value=n.genres.join(", "),showToast("Data refetched. Review and save.")}catch(t){showToast(t.message,!0)}finally{e.disabled=!1,e.innerHTML='<i class="fas fa-sync-alt mr-2"></i>Refetch from TMDb'}}
     async function deleteEntireMedia(){if(!confirm("PERMANENTLY DELETE this entire media item?"))return;try{const e=await fetch(`/api/media/${mediaType}/${tmdbId}`,{method:"DELETE"});if(!e.ok)throw new Error((await e.json()).detail);showToast("Media deleted. Redirecting..."),setTimeout(()=>window.location.href=`/manage/${mediaType}`,2e3)}catch(e){showToast(e.message,!0)}}
-    function openImageSelector(){document.getElementById('image-modal').classList.remove('hidden');handleFetchImages()}
-    function closeImageSelector(){document.getElementById('image-modal').classList.add('hidden')}
-    async function handleFetchImages(){const e=["posters","backdrops","logos"];for(const t of e)document.getElementById(`gallery-${t}`).innerHTML='<i class="fas fa-spinner fa-spin text-2xl text-gray-400"></i>';try{const t=await fetch(`/api/images/${mediaType}/${tmdbId}`);if(!t.ok)throw new Error("Could not fetch images.");const n=await t.json();for(const e of ["posters","backdrops","logos"])document.getElementById(`gallery-${e}`).innerHTML=n[e].map(t=>`<img src="https://image.tmdb.org/t/p/w300${t.path}" class="rounded-md cursor-pointer hover:opacity-75 transition-opacity" onclick="selectImage('${e.slice(0,-1)}', 'https://image.tmdb.org/t/p/original${t.path}')">`).join("")||'<p class="text-gray-400 col-span-full">No images found.</p>'}catch(e){showToast(e.message,!0)}}
+    function openImageSelector(){document.getElementById("image-modal").classList.remove("hidden"),handleFetchImages()}
+    function closeImageSelector(){document.getElementById("image-modal").classList.add("hidden")}
+    async function handleFetchImages(){if(imageDataCache)return renderImages(imageDataCache);const e=["posters","backdrops","logos"];for(const t of e)document.getElementById(`gallery-${t}`).innerHTML='<i class="fas fa-spinner fa-spin text-2xl text-gray-400"></i>';try{const t=await fetch(`/api/images/${mediaType}/${tmdbId}`);if(!t.ok)throw new Error("Could not fetch images.");imageDataCache=await t.json();const n=document.getElementById("lang-filter");n.innerHTML='<option value="all">All Languages</option>',imageDataCache.languages.forEach(e=>{const t=document.createElement("option");t.value=e,t.textContent=new Intl.DisplayNames(["en"],{type:"language"}).of(e)||e,n.appendChild(t)}),n.onchange=()=>renderImages(imageDataCache),renderImages(imageDataCache)}catch(e){showToast(e.message,!0)}}
+    function renderImages(e){const t=document.getElementById("lang-filter").value;["posters","backdrops","logos"].forEach(o=>{const n=document.getElementById(`gallery-${o}`);let a=e[o];"all"!==t&&(a=a.filter(e=>e.lang===t||null===e.lang)),n.innerHTML=a.map(e=>`<img src="https://image.tmdb.org/t/p/w300${e.path}" class="rounded-md cursor-pointer hover:opacity-75 transition-opacity" onclick="selectImage('${o.slice(0,-1)}', 'https://image.tmdb.org/t/p/original${e.path}')">`).join("")||'<p class="text-gray-400 col-span-full">No images found for this language.</p>'})}
     function switchTab(e){["posters","backdrops","logos"].forEach(t=>{document.getElementById(`gallery-${t}`).classList.add("hidden"),document.getElementById(`tab-${t}`).classList.remove("border-indigo-500","text-indigo-600"),document.getElementById(`tab-${t}`).classList.add("border-transparent","text-gray-500")}),document.getElementById(`gallery-${e}`).classList.remove("hidden"),document.getElementById(`tab-${e}`).classList.add("border-indigo-500","text-indigo-600"),document.getElementById(`tab-${e}`).classList.remove("border-transparent","text-gray-500")}
-    function selectImage(e,t){document.querySelector(`[name="${e}"]`).value=t,"poster"===e&&(document.getElementById("poster-preview").src=t),closeImageSelector()}
-    
-    // Dynamic Content Rendering Functions
-    function createStreamHTML(s={}){return`<div class="stream-item flex items-center p-3 bg-gray-50 rounded-md border gap-3"><input type="text" class="quality-input w-20 px-2 py-1 border rounded text-sm" placeholder="1080p" value="${s.quality||""}"><input type="text" class="name-input flex-1 px-2 py-1 border rounded text-sm" placeholder="File Name" value="${s.name||""}"><input type="text" class="url-input flex-1 px-2 py-1 border rounded text-sm" placeholder="DDL URL" value="${s.url||""}"><button type="button" onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700 text-sm"><i class="fas fa-trash-alt"></i></button></div>`}
+    function selectImage(e,t){const n=document.querySelector(`[name="${e}"]`);n&&(n.value=t),"poster"===e&&(document.getElementById("poster-preview").src=t),closeImageSelector()}
+    function createStreamHTML(e={}){return`<div class="stream-item flex flex-col sm:flex-row items-stretch sm:items-center p-3 bg-gray-50 rounded-md border gap-3"><input type="text" class="quality-input w-full sm:w-20 px-2 py-1.5 border rounded text-sm" placeholder="1080p" value="${e.quality||""}"><input type="text" class="name-input flex-1 px-2 py-1.5 border rounded text-sm" placeholder="File Name" value="${e.name||""}"><input type="text" class="url-input flex-1 px-2 py-1.5 border rounded text-sm" placeholder="DDL URL" value="${e.url||""}"><button type="button" onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700 text-sm p-2"><i class="fas fa-trash-alt"></i></button></div>`}
     function addStream(e){e.insertAdjacentHTML("beforeend",createStreamHTML())}
-    function createEpisodeHTML(e={}){let t="";e.streams?.forEach(e=>{t+=createStreamHTML(e)});return`<div class="episode-item border rounded-md p-3"><div class="flex justify-between items-start mb-2"><p class="font-medium text-sm flex-1 mr-2">E<input type="number" class="episode-number-input w-12 px-1 border rounded text-sm" value="${e.episode_number||""}">: <input type="text" class="episode-title-input w-full px-2 border rounded text-sm" value="${e.title||""}"></p><button type="button" onclick="this.closest('.episode-item').remove()" class="text-red-500 hover:text-red-700 text-xs font-semibold"><i class="fas fa-trash"></i> Episode</button></div><div class="streams-container space-y-2">${t}</div><button type="button" onclick="addStream(this.previousElementSibling)" class="text-xs bg-gray-100 px-3 py-1 rounded mt-2 hover:bg-gray-200">+ Add Stream</button></div>`}
+    function createEpisodeHTML(e={}){let t="";e.streams?.forEach(e=>{t+=createStreamHTML(e)});return`<div class="episode-item border rounded-md p-3"><div class="flex justify-between items-start mb-2 gap-2"><div class="font-medium text-sm flex-1 mr-2 flex items-center gap-2">E<input type="number" class="episode-number-input w-16 px-1.5 py-1 border rounded text-sm" value="${e.episode_number||""}">: <input type="text" class="episode-title-input w-full px-2 py-1 border rounded text-sm" value="${e.title||""}"></div><button type="button" onclick="this.closest('.episode-item').remove()" class="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50"><i class="fas fa-trash"></i> Episode</button></div><div class="streams-container space-y-2">${t}</div><button type="button" onclick="addStream(this.previousElementSibling)" class="text-xs bg-gray-100 px-3 py-1.5 rounded mt-2 hover:bg-gray-200">+ Add Stream</button></div>`}
     function addEpisode(e){e.insertAdjacentHTML("beforeend",createEpisodeHTML())}
-    function createSeasonHTML(e={}){let t="";e.episodes?.forEach(e=>{t+=createEpisodeHTML(e)});return`<div class="season-item border rounded-lg"><div class="bg-gray-50 p-3 flex justify-between items-center cursor-pointer" onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('i.fa-chevron-down').classList.toggle('rotate-180')"><h3 class="font-semibold">Season <input type="number" class="season-number-input w-16 px-2 py-1 border rounded text-sm" value="${e.season_number||""}"></h3><div class="flex items-center space-x-4"><button type="button" onclick="event.stopPropagation(); this.closest('.season-item').remove()" class="text-red-500 hover:text-red-700 text-xs font-semibold"><i class="fas fa-trash"></i> Season</button><i class="fas fa-chevron-down transition-transform"></i></div></div><div class="p-3 space-y-3 hidden">${t}<button type="button" onclick="addEpisode(this.parentElement)" class="text-sm bg-gray-200 px-4 py-2 rounded-md hover:bg-gray-300 mt-2">+ Add Episode</button></div></div>`}
-    function addSeason(){document.getElementById("content-container").querySelector(".space-y-4").insertAdjacentHTML("beforeend",createSeasonHTML({season_number:document.querySelectorAll(".season-item").length+1}))}
-    document.addEventListener("DOMContentLoaded",()=>{const e=document.getElementById("content-container");if(mediaType==="movie"){let t='<div id="streams-list" class="space-y-3">';mediaObject.streams.forEach(e=>{t+=createStreamHTML(e)}),t+='</div><div class="mt-4"><button type="button" onclick="addStream(document.getElementById(\'streams-list\'))" class="text-sm bg-gray-200 px-4 py-2 rounded-md hover:bg-gray-300">+ Add Stream</button></div>',e.innerHTML=t}else{let t='<div class="space-y-4">';mediaObject.seasons.forEach(e=>{t+=createSeasonHTML(e)}),t+='</div><div class="mt-4"><button type="button" onclick="addSeason()" class="text-sm bg-gray-200 px-4 py-2 rounded-md hover:bg-gray-300">+ Add Season</button></div>',e.innerHTML=t}});
+    function createSeasonHTML(e={}){let t="";e.episodes?.forEach(e=>{t+=createEpisodeHTML(e)});return`<div class="season-item border rounded-lg"><div class="bg-gray-50 p-3 flex justify-between items-center cursor-pointer" onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('i.fa-chevron-down').classList.toggle('rotate-180')"><h3 class="font-semibold flex items-center gap-2">Season <input type="number" class="season-number-input w-20 px-2 py-1 border rounded text-sm" value="${e.season_number||""}"></h3><div class="flex items-center space-x-4"><button type="button" onclick="event.stopPropagation(); this.closest('.season-item').remove()" class="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50"><i class="fas fa-trash"></i> Season</button><i class="fas fa-chevron-down transition-transform"></i></div></div><div class="p-3 space-y-3 hidden">${t}<button type="button" onclick="addEpisode(this.parentElement)" class="text-sm bg-gray-200 px-4 py-2 rounded-md hover:bg-gray-300 mt-2">+ Add Episode</button></div></div>`}
+    function addSeason(){const e=document.querySelector("#content-container > div.space-y-4");e.insertAdjacentHTML("beforeend",createSeasonHTML({season_number:e.querySelectorAll(".season-item").length+1}))}
+    document.addEventListener("DOMContentLoaded",()=>{const e=document.getElementById("content-container");if("movie"===mediaType){let t='<div id="streams-list" class="space-y-3">';mediaObject.streams.forEach(e=>{t+=createStreamHTML(e)}),t+='</div><div class="mt-4"><button type="button" onclick="addStream(document.getElementById(\'streams-list\'))" class="text-sm bg-gray-200 px-4 py-2 rounded-md hover:bg-gray-300">+ Add Stream</button></div>',e.innerHTML=t}else{let t='<div class="space-y-4">';mediaObject.seasons.forEach(e=>{t+=createSeasonHTML(e)}),t+='</div><div class="mt-4"><button type="button" onclick="addSeason()" class="text-sm bg-gray-200 px-4 py-2 rounded-md hover:bg-gray-300">+ Add Season</button></div>',e.innerHTML=t}});
 </script>
 {% endblock %}
