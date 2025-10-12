@@ -11,6 +11,21 @@ tmdb = aioTMDb(key=settings.TMDB_API_KEY, language="en-US", region="US")
 def format_tmdb_image(path: str, size: str = "w500") -> str:
     return f"https://image.tmdb.org/t/p/{size}{path}" if path else ""
 
+async def get_logo(tmdb_id: int, media_type: str) -> str | None:
+    try:
+        if media_type == "movie":
+            images = await tmdb.movie(tmdb_id).images()
+        else:
+            images = await tmdb.tv(tmdb_id).images()
+        
+        # Prefer English logos, then logos with no language, then any other
+        logos = sorted(images.logos, key=lambda x: (x.iso_639_1 != 'en', x.iso_639_1 is not None))
+        if logos:
+            return format_tmdb_image(logos[0].file_path, "original")
+    except Exception:
+        return None
+    return None
+
 async def get_metadata(filename: str, file_url: str) -> dict | None:
     try:
         parsed = PTN.parse(filename)
@@ -28,15 +43,12 @@ async def get_metadata(filename: str, file_url: str) -> dict | None:
             return None
 
         if season and episode:
-            # --- TV Show Logic ---
-            
-            # FIX: Removed the 'year' argument as it's not supported for TV searches
             search_results = await tmdb.search().tv(query=title)
-            
             if not search_results: return None
             
             show = await tmdb.tv(search_results[0].id).details()
             ep = await tmdb.episode(show.id, season, episode).details()
+            logo = await get_logo(show.id, "tv")
             
             return {
                 "tmdb_id": show.id, "title": show.name,
@@ -44,16 +56,16 @@ async def get_metadata(filename: str, file_url: str) -> dict | None:
                 "rating": round(show.vote_average, 1), "genres": [g.name for g in show.genres],
                 "poster": format_tmdb_image(show.poster_path),
                 "backdrop": format_tmdb_image(show.backdrop_path, "original"),
-                "description": show.overview, "media_type": "tv",
+                "logo": logo, "description": show.overview, "media_type": "tv",
                 "seasons": [{"season_number": season, "episodes": [{"episode_number": episode, "title": ep.name, "episode_backdrop": format_tmdb_image(ep.still_path, "original")}]}],
                 "quality": quality, "url": file_url,
             }
         else:
-            # --- Movie Logic (Remains unchanged and correctly uses year) ---
             search_results = await tmdb.search().movies(query=title, year=year)
             if not search_results: return None
             
             movie = await tmdb.movie(search_results[0].id).details()
+            logo = await get_logo(movie.id, "movie")
             
             return {
                 "tmdb_id": movie.id, "title": movie.title,
@@ -61,7 +73,7 @@ async def get_metadata(filename: str, file_url: str) -> dict | None:
                 "rating": round(movie.vote_average, 1), "genres": [g.name for g in movie.genres],
                 "poster": format_tmdb_image(movie.poster_path),
                 "backdrop": format_tmdb_image(movie.backdrop_path, "original"),
-                "description": movie.overview, "media_type": "movie",
+                "logo": logo, "description": movie.overview, "media_type": "movie",
                 "quality": quality, "url": file_url,
             }
     except Exception as e:
