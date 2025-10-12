@@ -10,7 +10,6 @@ from modal import MovieSchema, TVShowSchema, StreamInfo
 def sanitize_document(doc: Dict[str, Any]) -> Dict[str, Any]:
     if not doc:
         return None
-    # Use .items() to safely iterate over a copy
     for key, value in list(doc.items()):
         if isinstance(value, ObjectId):
             doc[key] = str(value)
@@ -32,29 +31,22 @@ class Database:
 
     async def insert_media(self, metadata: dict, size: str, name: str):
         if metadata['media_type'] == "movie":
-            # This logic for movies is correct and remains the same.
             existing = await self.movie_collection.find_one({"tmdb_id": metadata['tmdb_id']})
             stream_info = {"quality": metadata['quality'], "url": metadata['url'], "name": name, "size": size}
             
             if existing:
                 streams = existing.get("streams", [])
-                quality_exists = False
-                for q in streams:
-                    if q['quality'] == metadata['quality']:
-                        q.update(stream_info)
-                        quality_exists = True
-                        break
-                if not quality_exists:
+                # Prevent adding if the exact same URL already exists
+                if not any(s['url'] == stream_info['url'] for s in streams):
                     streams.append(stream_info)
-                
-                await self.movie_collection.update_one(
-                    {"_id": existing["_id"]},
-                    {"$set": {"streams": streams, "updated_on": datetime.utcnow()}}
-                )
+                    await self.movie_collection.update_one(
+                        {"_id": existing["_id"]},
+                        {"$set": {"streams": streams, "updated_on": datetime.utcnow()}}
+                    )
             else:
                 await self.movie_collection.insert_one(MovieSchema(**metadata, streams=[stream_info]).dict())
         
-        else:
+        else: # TV Show logic
             existing = await self.tv_collection.find_one({"tmdb_id": metadata['tmdb_id']})
             stream_info = StreamInfo(quality=metadata['quality'], url=metadata['url'], name=name, size=size)
             
@@ -70,7 +62,8 @@ class Database:
                         for e in s.get("episodes", []):
                             if e['episode_number'] == new_episode_data['episode_number']:
                                 episode_found = True
-                                if not any(q['quality'] == stream_info.quality for q in e.get("streams", [])):
+                                # IMPROVED: Prevent adding if the exact same URL already exists
+                                if not any(q['url'] == stream_info.url for q in e.get("streams", [])):
                                     e['streams'].append(stream_info.dict())
                                 break
                         if not episode_found:
@@ -109,9 +102,7 @@ class Database:
         return sanitize_document(doc)
 
     async def update_media_details(self, media_type: str, tmdb_id: int, data: Dict[str, Any]):
-        # Safely remove the immutable _id field before updating
         data.pop("_id", None)
-        
         collection = self.movie_collection if media_type == 'movie' else self.tv_collection
         result = await collection.update_one({"tmdb_id": tmdb_id}, {"$set": data})
         return result.modified_count > 0
