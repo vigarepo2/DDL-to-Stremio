@@ -10,7 +10,8 @@ from modal import MovieSchema, TVShowSchema, StreamInfo
 def sanitize_document(doc: Dict[str, Any]) -> Dict[str, Any]:
     if not doc:
         return None
-    for key, value in doc.items():
+    # Use .items() to safely iterate over a copy
+    for key, value in list(doc.items()):
         if isinstance(value, ObjectId):
             doc[key] = str(value)
         elif isinstance(value, datetime):
@@ -53,51 +54,41 @@ class Database:
             else:
                 await self.movie_collection.insert_one(MovieSchema(**metadata, streams=[stream_info]).dict())
         
-        # --- START OF CORRECTED TV SHOW LOGIC ---
-        else:  # TV Show
+        else:
             existing = await self.tv_collection.find_one({"tmdb_id": metadata['tmdb_id']})
             stream_info = StreamInfo(quality=metadata['quality'], url=metadata['url'], name=name, size=size)
             
-            # Correctly extract the new season/episode data from the metadata
             new_season_data = metadata['seasons'][0]
             new_episode_data = new_season_data['episodes'][0]
 
             if existing:
                 season_found = False
-                # Find the correct season in the existing document
                 for s in existing.get("seasons", []):
                     if s['season_number'] == new_season_data['season_number']:
                         season_found = True
                         episode_found = False
-                        # Find the correct episode in the existing season
                         for e in s.get("episodes", []):
                             if e['episode_number'] == new_episode_data['episode_number']:
                                 episode_found = True
-                                # Check if the quality already exists, if not, add it
                                 if not any(q['quality'] == stream_info.quality for q in e.get("streams", [])):
                                     e['streams'].append(stream_info.dict())
                                 break
-                        # If episode not found, add the new episode to the season
                         if not episode_found:
                             new_episode_data['streams'] = [stream_info.dict()]
                             s['episodes'].append(new_episode_data)
                         break
-                # If season not found, add the new season to the show
                 if not season_found:
                     new_season_data['episodes'][0]['streams'] = [stream_info.dict()]
                     existing.setdefault('seasons', []).append(new_season_data)
-
-                # Update the entire document in the database
+                
                 await self.tv_collection.update_one(
                     {"_id": existing["_id"]}, 
                     {"$set": {"seasons": existing['seasons'], "updated_on": datetime.utcnow()}}
                 )
             else:
-                # This logic for inserting a brand new show is correct
                 tv_data = TVShowSchema(**metadata)
                 tv_data.seasons[0].episodes[0].streams = [stream_info]
                 await self.tv_collection.insert_one(tv_data.dict())
-        # --- END OF CORRECTED TV SHOW LOGIC ---
 
     async def get_media_list(self, media_type: str, page: int, page_size: int, search: Optional[str] = None):
         collection = self.movie_collection if media_type == 'movie' else self.tv_collection
@@ -118,6 +109,9 @@ class Database:
         return sanitize_document(doc)
 
     async def update_media_details(self, media_type: str, tmdb_id: int, data: Dict[str, Any]):
+        # Safely remove the immutable _id field before updating
+        data.pop("_id", None)
+        
         collection = self.movie_collection if media_type == 'movie' else self.tv_collection
         result = await collection.update_one({"tmdb_id": tmdb_id}, {"$set": data})
         return result.modified_count > 0
