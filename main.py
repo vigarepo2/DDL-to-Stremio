@@ -93,13 +93,11 @@ async def api_add_ddl(request: Request, _: None = Depends(require_auth)):
         LOGGER.error(f"Error processing DDL {url}: {e}", exc_info=True)
         return JSONResponse({"message": "An unexpected server error occurred. Check logs for details."}, status_code=500)
 
-# --- NEW API ENDPOINT FOR FETCHING STREAM DETAILS ---
 @app.post("/api/fetch-ddl-details", response_class=JSONResponse)
 async def api_fetch_ddl_details(request: Request, _: None = Depends(require_auth)):
     data = await request.json()
     url = data.get("url")
-    if not url:
-        raise HTTPException(status_code=400, detail="URL is required.")
+    if not url: raise HTTPException(status_code=400, detail="URL is required.")
     try:
         filename = os.path.basename(unquote(urlparse(url).path))
         async with httpx.AsyncClient() as client:
@@ -115,6 +113,21 @@ async def api_fetch_ddl_details(request: Request, _: None = Depends(require_auth
     except Exception as e:
         LOGGER.error(f"Error fetching details for DDL {url}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An unexpected server error occurred.")
+
+# --- NEW API ENDPOINT FOR FETCHING EPISODE DETAILS ---
+@app.get("/api/fetch-episode-details/{tmdb_id}/{season_number}/{episode_number}", response_class=JSONResponse)
+async def api_fetch_episode_details(tmdb_id: int, season_number: int, episode_number: int, _: None = Depends(require_auth)):
+    from metadata import tmdb
+    try:
+        episode = await tmdb.episode(tmdb_id, season_number, episode_number).details()
+        return {
+            "title": episode.name,
+            "episode_backdrop": format_tmdb_image(episode.still_path, "w500") # Use w500 for a reasonable size
+        }
+    except Exception as e:
+        LOGGER.error(f"Failed to fetch episode details for S{season_number}E{episode_number} of TMDB ID {tmdb_id}: {e}")
+        raise HTTPException(status_code=404, detail="Episode not found on TMDb.")
+
 
 @app.get("/api/media/{media_type}")
 async def api_get_media(media_type: str, page: int = 1, search: str = "", _: None = Depends(require_auth)):
