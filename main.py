@@ -9,7 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
 from database import db
-from metadata import get_metadata
+from metadata import get_metadata, format_tmdb_image  # <-- FIX IS HERE
 import logging
 
 app = FastAPI(title="DDL Stremio Addon - Premium")
@@ -19,6 +19,7 @@ templates = Jinja2Templates(directory="templates")
 
 LOGGER = logging.getLogger(__name__)
 
+# --- Authentication ---
 def is_authenticated(request: Request) -> bool:
     return request.session.get("authenticated", False)
 
@@ -26,6 +27,7 @@ def require_auth(request: Request):
     if not is_authenticated(request):
         raise HTTPException(status_code=307, headers={"Location": "/login"})
 
+# --- Web UI Routes ---
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     if is_authenticated(request): return RedirectResponse(url="/", status_code=303)
@@ -64,6 +66,7 @@ async def edit_media_page(request: Request, media_type: str, tmdb_id: int, _: No
     if not media: raise HTTPException(status_code=404, detail="Media not found")
     return templates.TemplateResponse("media_edit.html", {"request": request, "media": media, "media_type": media_type})
 
+# --- API Routes ---
 @app.post("/api/add-ddl", response_class=JSONResponse)
 async def api_add_ddl(request: Request, _: None = Depends(require_auth)):
     data = await request.json()
@@ -101,15 +104,14 @@ async def api_delete_media(media_type: str, tmdb_id: int, _: None = Depends(requ
     if not success: raise HTTPException(status_code=404, detail="Media not found.")
     return {"message": "Media deleted successfully"}
 
-# --- NEW REFETCH ENDPOINT ---
 @app.get("/api/refetch-tmdb/{media_type}/{tmdb_id}")
 async def api_refetch_tmdb(media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
-    from metadata import get_logo
+    from metadata import get_logo, tmdb
     if media_type == 'movie':
         details = await tmdb.movie(tmdb_id).details()
         logo = await get_logo(tmdb_id, "movie")
         return {
-            "title": details.title, "release_year": details.release_date.year, "rating": round(details.vote_average, 1),
+            "title": details.title, "release_year": details.release_date.year if details.release_date else 0, "rating": round(details.vote_average, 1),
             "poster": format_tmdb_image(details.poster_path), "backdrop": format_tmdb_image(details.backdrop_path, "original"),
             "logo": logo, "description": details.overview, "genres": [g.name for g in details.genres]
         }
@@ -117,7 +119,7 @@ async def api_refetch_tmdb(media_type: str, tmdb_id: int, _: None = Depends(requ
         details = await tmdb.tv(tmdb_id).details()
         logo = await get_logo(tmdb_id, "tv")
         return {
-            "title": details.name, "release_year": details.first_air_date.year, "rating": round(details.vote_average, 1),
+            "title": details.name, "release_year": details.first_air_date.year if details.first_air_date else 0, "rating": round(details.vote_average, 1),
             "poster": format_tmdb_image(details.poster_path), "backdrop": format_tmdb_image(details.backdrop_path, "original"),
             "logo": logo, "description": details.overview, "genres": [g.name for g in details.genres]
         }
@@ -144,7 +146,7 @@ async def get_meta(media_type: str, stremio_id: str):
     meta_obj = {
         "id": stremio_id, "type": media_type, "name": item['title'],
         "poster": item.get('poster'), "background": item.get('backdrop'),
-        "logo": item.get('logo'),  # <-- LOGO ADDED HERE
+        "logo": item.get('logo'),
         "description": item.get('description'), "year": item.get('release_year'),
         "imdbRating": item.get('rating'), "genres": item.get('genres')
     }
