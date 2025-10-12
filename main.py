@@ -19,16 +19,13 @@ templates = Jinja2Templates(directory="templates")
 
 LOGGER = logging.getLogger(__name__)
 
-# --- Authentication ---
 def is_authenticated(request: Request) -> bool:
     return request.session.get("authenticated", False)
 
 def require_auth(request: Request):
     if not is_authenticated(request):
-        # Use a 307 redirect for POST requests, but 303 is fine for GET
         raise HTTPException(status_code=307, headers={"Location": "/login"})
 
-# --- Web UI Routes ---
 @app.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     if is_authenticated(request): return RedirectResponse(url="/", status_code=303)
@@ -47,45 +44,31 @@ async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
 
-# --- UPDATED DASHBOARD ROUTE ---
 @app.get("/", response_class=HTMLResponse)
 async def dashboard_page(request: Request, _: None = Depends(require_auth)):
     stats = await db.get_stats()
     recent_movies, _ = await db.get_media_list('movie', 1, 5)
     recent_tv, _ = await db.get_media_list('tv', 1, 5)
-    
-    # Combine and sort recent items by 'updated_on'
     recent_items = sorted(recent_movies + recent_tv, key=lambda x: x['updated_on'], reverse=True)[:5]
-    
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request, 
-        "stats": stats,
-        "recent_items": recent_items
-    })
+    return templates.TemplateResponse("dashboard.html", {"request": request, "stats": stats, "recent_items": recent_items})
 
 @app.get("/manage/{media_type}", response_class=HTMLResponse)
 async def manage_media_page(request: Request, media_type: str, _: None = Depends(require_auth)):
-    if media_type not in ['movie', 'tv']:
-        raise HTTPException(status_code=404, detail="Invalid media type")
+    if media_type not in ['movie', 'tv']: raise HTTPException(status_code=404, detail="Invalid media type")
     return templates.TemplateResponse("media_management.html", {"request": request, "media_type": media_type})
 
 @app.get("/edit/{media_type}/{tmdb_id}", response_class=HTMLResponse)
 async def edit_media_page(request: Request, media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
-    if media_type not in ['movie', 'tv']:
-        raise HTTPException(status_code=404, detail="Invalid media type")
+    if media_type not in ['movie', 'tv']: raise HTTPException(status_code=404, detail="Invalid media type")
     media = await db.get_media_by_tmdb_id(media_type, tmdb_id)
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
+    if not media: raise HTTPException(status_code=404, detail="Media not found")
     return templates.TemplateResponse("media_edit.html", {"request": request, "media": media, "media_type": media_type})
 
-# --- API Routes (No changes needed here from previous fix) ---
-# ... (All your API routes for add, get, update, delete media remain the same)
 @app.post("/api/add-ddl", response_class=JSONResponse)
 async def api_add_ddl(request: Request, _: None = Depends(require_auth)):
     data = await request.json()
     url = data.get("url")
     if not url: raise HTTPException(status_code=400, detail="URL is required.")
-
     try:
         filename = os.path.basename(unquote(urlparse(url).path))
         async with httpx.AsyncClient() as client:
@@ -93,11 +76,8 @@ async def api_add_ddl(request: Request, _: None = Depends(require_auth)):
             resp.raise_for_status()
             size_bytes = int(resp.headers.get('content-length', '0'))
             size_str = f"{round(size_bytes / (1024**3), 2)} GB" if size_bytes > 0 else "N/A"
-        
         metadata_info = await get_metadata(filename, url)
-        if not metadata_info:
-            return JSONResponse({"message": f"Failed to get metadata for '{filename}'. Check filename format."}, status_code=400)
-        
+        if not metadata_info: return JSONResponse({"message": f"Failed to get metadata for '{filename}'. Check filename format."}, status_code=400)
         await db.insert_media(metadata_info, size=size_str, name=filename)
         return JSONResponse({"message": f"Successfully added '{metadata_info['title']}'"}, status_code=200)
     except Exception as e:
@@ -112,29 +92,40 @@ async def api_get_media(media_type: str, page: int = 1, search: str = "", _: Non
 @app.put("/api/media/{media_type}/{tmdb_id}")
 async def api_update_media(media_type: str, tmdb_id: int, data: dict = Body(...), _: None = Depends(require_auth)):
     success = await db.update_media_details(media_type, tmdb_id, data)
-    if not success:
-        raise HTTPException(status_code=404, detail="Failed to update or media not found.")
+    if not success: raise HTTPException(status_code=404, detail="Failed to update or media not found.")
     return {"message": "Media updated successfully"}
 
 @app.delete("/api/media/{media_type}/{tmdb_id}")
 async def api_delete_media(media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
     success = await db.delete_media(media_type, tmdb_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Media not found.")
+    if not success: raise HTTPException(status_code=404, detail="Media not found.")
     return {"message": "Media deleted successfully"}
 
-# --- Stremio Addon Routes (Title fix applied) ---
+# --- NEW REFETCH ENDPOINT ---
+@app.get("/api/refetch-tmdb/{media_type}/{tmdb_id}")
+async def api_refetch_tmdb(media_type: str, tmdb_id: int, _: None = Depends(require_auth)):
+    from metadata import get_logo
+    if media_type == 'movie':
+        details = await tmdb.movie(tmdb_id).details()
+        logo = await get_logo(tmdb_id, "movie")
+        return {
+            "title": details.title, "release_year": details.release_date.year, "rating": round(details.vote_average, 1),
+            "poster": format_tmdb_image(details.poster_path), "backdrop": format_tmdb_image(details.backdrop_path, "original"),
+            "logo": logo, "description": details.overview, "genres": [g.name for g in details.genres]
+        }
+    else: # tv
+        details = await tmdb.tv(tmdb_id).details()
+        logo = await get_logo(tmdb_id, "tv")
+        return {
+            "title": details.name, "release_year": details.first_air_date.year, "rating": round(details.vote_average, 1),
+            "poster": format_tmdb_image(details.poster_path), "backdrop": format_tmdb_image(details.backdrop_path, "original"),
+            "logo": logo, "description": details.overview, "genres": [g.name for g in details.genres]
+        }
+
+# --- Stremio Addon Routes ---
 @app.get("/stremio/manifest.json")
 async def get_manifest():
-    return {
-        "id": "community.ddl.streamer.premium", "version": "3.0.0", "name": "DDL Streamer (Premium)",
-        "description": "Stream from your personal DDL library.", "logo": "https://i.imgur.com/f33tN3G.png",
-        "types": ["movie", "series"], "resources": ["catalog", "meta", "stream"],
-        "catalogs": [
-            {"type": "movie", "id": "ddl_movies", "name": "DDL Movies"},
-            {"type": "series", "id": "ddl_series", "name": "DDL TV Shows"}
-        ], "idPrefixes": ["ddl-"]
-    }
+    return {"id": "community.ddl.streamer.premium", "version": "3.0.0", "name": "DDL Streamer (Premium)", "description": "Stream from your personal DDL library.", "logo": "https://i.imgur.com/f33tN3G.png", "types": ["movie", "series"], "resources": ["catalog", "meta", "stream"], "catalogs": [{"type": "movie", "id": "ddl_movies", "name": "DDL Movies"}, {"type": "series", "id": "ddl_series", "name": "DDL TV Shows"}], "idPrefixes": ["ddl-"]}
 
 @app.get("/stremio/catalog/{media_type}/{catalog_id}.json")
 async def get_catalog(media_type: str):
@@ -153,36 +144,30 @@ async def get_meta(media_type: str, stremio_id: str):
     meta_obj = {
         "id": stremio_id, "type": media_type, "name": item['title'],
         "poster": item.get('poster'), "background": item.get('backdrop'),
+        "logo": item.get('logo'),  # <-- LOGO ADDED HERE
         "description": item.get('description'), "year": item.get('release_year'),
         "imdbRating": item.get('rating'), "genres": item.get('genres')
     }
     if media_type == 'series':
-        meta_obj['videos'] = [
-            {"id": f"{stremio_id}:{s['season_number']}:{e['episode_number']}", "title": e['title'], "season": s['season_number'], "episode": e['episode_number'], "thumbnail": e.get('episode_backdrop')}
-            for s in sorted(item.get('seasons', []), key=lambda x: x['season_number'])
-            for e in sorted(s.get('episodes', []), key=lambda x: x['episode_number'])
-        ]
+        meta_obj['videos'] = [{"id": f"{stremio_id}:{s['season_number']}:{e['episode_number']}", "title": e['title'], "season": s['season_number'], "episode": e['episode_number'], "thumbnail": e.get('episode_backdrop')} for s in sorted(item.get('seasons', []), key=lambda x: x['season_number']) for e in sorted(s.get('episodes', []), key=lambda x: x['episode_number'])]
     return {"meta": meta_obj}
 
-# --- STREMIO TITLE FIX APPLIED HERE ---
 @app.get("/stremio/stream/{media_type}/{stremio_id}.json")
 async def get_streams(media_type: str, stremio_id: str):
-    parts = stremio_id.split(':')
-    tmdb_id = int(parts[0].replace("ddl-", ""))
+    parts = stremio_id.split(':'); tmdb_id = int(parts[0].replace("ddl-", ""))
     stremio_type = "tv" if media_type == "series" else "movie"
     item = await db.get_media_by_tmdb_id(stremio_type, tmdb_id)
     if not item: return {"streams": []}
-
     streams = []
     if media_type == 'movie':
-        streams = [{"title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']} for q in item.get('streams', [])]
+        streams = [{"name": "DDL", "title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']} for q in item.get('streams', [])]
     else:
         season_num, episode_num = int(parts[1]), int(parts[2])
         for s in item.get('seasons', []):
             if s['season_number'] == season_num:
                 for e in s.get('episodes', []):
                     if e['episode_number'] == episode_num:
-                        streams = [{"title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']} for q in e.get('streams', [])]
+                        streams = [{"name": "DDL", "title": f"{q['quality']} - {q['size']}\n{q['name']}", "url": q['url']} for q in e.get('streams', [])]
                         break
                 break
     return {"streams": streams}
